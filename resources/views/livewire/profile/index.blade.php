@@ -303,6 +303,16 @@
         <section class="application-settings-section">
             <div class="application-settings-section-header">
                 <div>
+                    <h2>Passkeys</h2>
+                    <p>Sign in using your fingerprint, face, device PIN, or security key.</p>
+                </div>
+                <a class="button" href="{{ route('profile.passkeys') }}">Manage passkeys</a>
+            </div>
+        </section>
+
+        <section class="application-settings-section">
+            <div class="application-settings-section-header">
+                <div>
                     <h2>Danger zone</h2>
                     <p>Destructive actions for your account cannot be undone.</p>
                 </div>

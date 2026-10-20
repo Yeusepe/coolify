@@ -78,6 +78,15 @@
                 </x-forms.button>
             </form>
 
+            <div x-data="coolifyPasskeys()" class="flex flex-col gap-2">
+                <x-forms.button type="button" class="w-full justify-center" x-on:click="login()"
+                    x-bind:disabled="busy || !supported">
+                    Sign in with a passkey
+                </x-forms.button>
+                <p x-show="!supported" x-cloak class="text-xs text-fg-dim">Passkeys require HTTPS and a current browser. You can still sign in with your password.</p>
+                <p x-show="error" x-text="error" x-cloak role="alert" class="text-sm text-red-500"></p>
+            </div>
+
             @if ($enabled_oauth_providers->isNotEmpty())
                 <div class="auth-divider"><span>Or continue with</span></div>
                 <div class="flex flex-col gap-2">

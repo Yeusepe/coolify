@@ -21,6 +21,13 @@ class UpdateCoolify
 
     public function handle($manual_update = false)
     {
+        if (config('constants.coolify.fork_managed_updates')) {
+            if ($manual_update) {
+                throw new \RuntimeException('This instance deploys tested images from its GitHub fork. Use the fork deployment workflow to update it.');
+            }
+
+            return;
+        }
         if (isDev()) {
             Sleep::for(10)->seconds();
 

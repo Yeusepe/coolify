@@ -106,6 +106,7 @@ return [
         'login' => 'login',
         'two-factor' => 'two-factor',
         'forgot-password' => 'forgot-password',
+        'passkeys' => '5',
     ],
 
     /*
@@ -137,6 +138,7 @@ return [
         Features::resetPasswords(),
         // Features::emailVerification(),
         Features::updatePasswords(),
+        Features::passkeys(['confirmPassword' => true]),
         Features::twoFactorAuthentication([
             'confirm' => true,
             'confirmPassword' => true,
