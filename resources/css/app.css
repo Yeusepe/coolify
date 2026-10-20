@@ -430,11 +430,15 @@ body {
     @apply w-full min-h-full bg-neutral-50 dark:bg-app dark:text-fg-dim;
 }
 
+html {
+    /* Keep the viewport as the page scroller; clipping the body can stall Safari scrolling. */
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
 body {
-    /* overflow-x: clip (not hidden) — hidden creates a scroll containment that
-       breaks position:sticky on settings sidebars and other in-page pins. */
     min-height: 100dvh;
-    @apply text-sm font-sans antialiased scrollbar overflow-x-clip;
+    @apply text-sm font-sans antialiased scrollbar;
 }
 
 .coolify-monaco-editor {
