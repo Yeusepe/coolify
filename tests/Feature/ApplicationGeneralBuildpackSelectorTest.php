@@ -77,7 +77,7 @@ test('existing application buildpack selector lists railpack before nixpacks', f
         // The build strategy listbox renders its options as JSON-encoded Alpine data
         ->assertSeeInOrder([
             '\u0022value\u0022:\u0022railpack\u0022,\u0022label\u0022:\u0022Railpack\u0022',
-            '\u0022value\u0022:\u0022nixpacks\u0022,\u0022label\u0022:\u0022Nixpacks\u0022',
+            '\u0022value\u0022:\u0022nixpacks\u0022,\u0022label\u0022:\u0022Nixpacks (deprecated)\u0022',
         ], false);
 });
 

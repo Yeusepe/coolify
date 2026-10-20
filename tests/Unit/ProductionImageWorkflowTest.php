@@ -187,11 +187,11 @@ it('documents the production, rc, and hotfix release flows', function () {
 
     expect($releaseGuide)
         ->toContain('| `main` | Latest production source |')
-        ->toContain('| `next` | Feature integration and RC releases |')
+        ->toContain('| `release/v4.x` | Feature integration and RC releases for the next minor release, such as `release/v4.5` |')
         ->toContain('| `hotfix/X.Y.Z` | Production fixes based on `main` |')
-        ->toContain('feature/* → next → RC')
-        ->toContain('next → main → stable release')
-        ->toContain('main → hotfix/X.Y.Z → main → next')
+        ->toContain('feature/* → release/v4.x → RC')
+        ->toContain('release/v4.x → main → stable release')
+        ->toContain('main → hotfix/X.Y.Z → main → release/v4.x')
         ->toContain('reviewed draft GitHub Release')
         ->toContain('workflows never edit or commit versions')
         ->toContain('Update the CDN only after the release is approved')
@@ -206,9 +206,9 @@ it('documents pull request targets for fixes and features', function () {
         ->toContain('Fixes and small improvements')
         ->toContain('target `main`')
         ->toContain('New features and larger changes')
-        ->toContain('target `next`')
+        ->toContain('target `release/v4.x`')
         ->toContain('branch from `main`')
-        ->toContain('branch from `next`')
+        ->toContain('branch from `release/v4.x`')
         ->not->toContain('All pull requests must target the `next` branch');
 });
 
@@ -221,4 +221,14 @@ it('guides issue authors to the correct contribution branch', function () {
         ->and($issueConfig)
         ->toContain('Feature code should branch from `next` and target `next`')
         ->toContain('Small fixes should target `main`; larger changes should target `next`');
+});
+
+it('ships versions.json in the production image so version checks work right after an upgrade', function () {
+    $dockerfile = file_get_contents(dirname(__DIR__, 2).'/docker/production/Dockerfile');
+    $dockerignore = file_get_contents(dirname(__DIR__, 2).'/.dockerignore');
+
+    expect($dockerfile)
+        ->toContain('COPY --chown=www-data:www-data versions.json ./versions.json')
+        ->and($dockerignore)
+        ->not->toMatch('/^\/?versions\.json$/m');
 });

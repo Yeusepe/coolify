@@ -48,6 +48,9 @@ BASH;
         chmod($this->devRoot.'/bin/'.$binary, 0755);
     }
 
+    file_put_contents($this->devRoot.'/bin/sudo', "#!/usr/bin/env bash\nwhile [[ \"\$1\" == -* ]]; do shift; done\nexec \"\$@\"\n");
+    chmod($this->devRoot.'/bin/sudo', 0755);
+
     $this->limaConfig = $this->devRoot.'/lima.yaml';
     $this->fakeLima = function (): void {
         file_put_contents($this->devRoot.'/bin/limactl', <<<'BASH'

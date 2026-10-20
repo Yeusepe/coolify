@@ -24,6 +24,11 @@ afterEach(function () {
 
 function reverbSoftOpenFileLimit(string $runScript, string $hardLimit, string $softLimit, string $bin, bool $loopExtension = true): string
 {
+    $available = trim(Process::run('ulimit -Hn')->output());
+    if ($available !== 'unlimited' && (int) $hardLimit > (int) $available) {
+        test()->markTestSkipped('The runner cannot raise its inherited hard open-file limit.');
+    }
+
     $result = Process::env(['PATH' => "{$bin}:/usr/bin:/bin", 'FAKE_LOOP_EXTENSION' => $loopExtension ? 'yes' : 'no'])->run(sprintf(
         // The soft limit is lowered first: a hard limit below the current soft limit is invalid.
         'ulimit -Sn %s && ulimit -Hn %s && exec sh %s',
@@ -32,7 +37,7 @@ function reverbSoftOpenFileLimit(string $runScript, string $hardLimit, string $s
         escapeshellarg(base_path($runScript)),
     ));
 
-    expect($result->successful())->toBeTrue();
+    expect($result->successful())->toBeTrue($result->errorOutput());
 
     return trim(str($result->output())->afterLast('soft='));
 }

@@ -3,6 +3,10 @@
 use App\Jobs\ApplicationDeploymentJob;
 use App\Models\Application;
 use App\Models\ApplicationDeploymentQueue;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
+
+uses(TestCase::class, RefreshDatabase::class);
 
 function setDeploymentJobProperty(object $job, string $property, mixed $value): void
 {

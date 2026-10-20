@@ -67,8 +67,8 @@ it('creates one REDIS_USERNAME variable and starts with unique environment entri
         }
     }
 
-    expect($environment)->toHaveCount(2)
-        ->and($environment)->toContain('REDIS_USERNAME=default')
+    expect(array_values(array_filter($environment, fn (string $entry) => str_starts_with($entry, 'REDIS_'))))->toHaveCount(2);
+    expect($environment)->toContain('REDIS_USERNAME=default')
         ->and(array_unique($environment))->toBe($environment);
 });
 

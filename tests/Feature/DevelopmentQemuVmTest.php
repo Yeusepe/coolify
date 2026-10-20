@@ -82,6 +82,7 @@ it('stores vm disks in a libvirt-accessible directory', function () {
 });
 
 it('automatically configures the qemu host', function () {
+    config(['development-qemu.storage_path' => sys_get_temp_dir().'/coolify-qemu-host-'.uniqid()]);
     Process::fake(function ($process) {
         if (str_contains($process->command, 'command -v')) {
             return Process::result();
@@ -114,6 +115,7 @@ it('automatically configures the qemu host', function () {
 });
 
 it('does not restart an active libvirt network', function () {
+    config(['development-qemu.storage_path' => sys_get_temp_dir().'/coolify-qemu-host-'.uniqid()]);
     Process::fake(function ($process) {
         if (str_contains($process->command, 'net-info')) {
             return Process::result(output: "Name: default\nActive:          yes\n");

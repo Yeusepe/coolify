@@ -67,9 +67,6 @@ describe('sentinel url from the current request', function () {
 describe('public database urls', function () {
     function publicDatabaseUrl(string $modelClass, array $attributes, string $serverIp): ?string
     {
-        if ($modelClass === StandaloneMongodb::class) {
-            $attributes['mongo_initdb_root_password'] = encrypt($attributes['mongo_initdb_root_password']);
-        }
         $database = new $modelClass;
         $database->forceFill(array_merge(['is_public' => true, 'public_port' => 15432], $attributes));
         $database->setRelation('destination', (object) ['server' => (object) ['getIp' => $serverIp]]);
