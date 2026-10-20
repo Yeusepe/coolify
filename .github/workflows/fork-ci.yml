@@ -64,10 +64,11 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: |
-            ghcr.io/yeusepe/coolify:fork-main
             ghcr.io/yeusepe/coolify:sha-${{ github.sha }}
           labels: |
             org.opencontainers.image.source=https://github.com/Yeusepe/coolify
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Promote the completed build for automatic deployment
+        run: docker buildx imagetools create --tag ghcr.io/yeusepe/coolify:fork-main ghcr.io/yeusepe/coolify:sha-${{ github.sha }}

@@ -19,6 +19,9 @@ case "$*" in
     'image inspect --format {{.Id}}'*) echo "${FORK_TEST_NEW_IMAGE:-sha256:new}" ;;
     'exec coolify sh -c'*) echo old-migrations ;;
     'run --rm --network none --read-only'*) echo "${FORK_TEST_MIGRATIONS:-old-migrations}" ;;
+    'exec coolify curl'*)
+        [[ "$*" == *'http://127.0.0.1:8080/'* ]]
+        [[ ${FORK_TEST_FAIL_HEALTH:-false} == false ]] ;;
     'exec coolify-db sh -c'*) echo database-backup ;;
     'exec -i coolify-db pg_restore --list') cat >/dev/null; echo valid-archive ;;
     'compose '* )
@@ -61,4 +64,7 @@ grep -q 'image: sha256:old' "$temp/source/docker-compose.fork.yml"
 
 FORK_TEST_MIGRATIONS=new-migrations bash "$temp/update.sh" --allow-migrations
 grep -q 'ghcr.io/yeusepe/coolify@sha256:' "$temp/source/docker-compose.fork.yml"
-echo 'Fork updater checks passed: no-op, deploy, rollback, migration gate, reviewed migration.'
+rm "$temp/source/.fork-failed"
+FORK_TEST_FAIL_HEALTH=true bash "$temp/update.sh" && exit 1
+grep -q 'image: sha256:old' "$temp/source/docker-compose.fork.yml"
+echo 'Fork updater checks passed: no-op, deploy, rollback, migration gate, reviewed migration, failed health probe.'
