@@ -106,7 +106,7 @@
 
         <x-slot:footer>
             @if ($is_registration_enabled)
-                <span>New to Coolify?</span>
+                <span>New to racconify?</span>
                 <a href="/register" class="auth-text-link">{{ __('auth.register_now') }}</a>
             @elseif ($can_register_with_oauth)
                 <span>{{ __('auth.register_with_oauth') }}</span>

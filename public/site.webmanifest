@@ -1,14 +1,12 @@
 {
-    "name": "Coolify",
-    "short_name": "Coolify",
+    "name": "racconify",
+    "short_name": "racconify",
     "start_url": "/",
     "scope": "/",
     "display": "standalone",
-    "background_color": "#101010",
-    "theme_color": "#101010",
+    "background_color": "#322424",
+    "theme_color": "#322424",
     "icons": [
-        { "src": "/icon-192.png", "type": "image/png", "sizes": "192x192" },
-        { "src": "/icon-512.png", "type": "image/png", "sizes": "512x512" },
-        { "src": "/icon-maskable-512.png", "type": "image/png", "sizes": "512x512", "purpose": "maskable" }
+        { "src": "/racconify.png", "type": "image/png", "sizes": "200x200" }
     ]
 }

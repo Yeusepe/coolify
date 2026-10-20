@@ -7,9 +7,10 @@
     <div class="auth-shell-content">
         <div class="auth-card">
             <div class="auth-card-heading">
-                <h1>{{ $title }}</h1>
+                <img src="{{ asset('racconify.png') }}" alt="racconify" class="racconify-brand-icon mb-3 size-14" width="56" height="56">
+                <h1>{{ str_replace('Coolify', 'racconify', $title) }}</h1>
                 @if ($description)
-                    <p>{{ $description }}</p>
+                    <p>{{ str_replace('Coolify', 'racconify', $description) }}</p>
                 @endif
             </div>
 

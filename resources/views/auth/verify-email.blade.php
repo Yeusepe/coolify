@@ -3,7 +3,7 @@
         <div class="flex flex-col gap-4">
             <div class="auth-guidance">
                 <x-reicon name="mail" class="mt-0.5 size-4 shrink-0" />
-                <p>We sent a verification link to your email address. Open it to continue to Coolify.</p>
+                <p>We sent a verification link to your email address. Open it to continue to racconify.</p>
             </div>
 
             <livewire:verify-email />

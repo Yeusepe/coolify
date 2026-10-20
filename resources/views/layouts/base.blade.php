@@ -41,7 +41,7 @@
             document.documentElement.dataset.theme = theme === 'custom' ? 'custom' : (isDark ? 'dark' : 'light');
             document.documentElement.style.setProperty('--theme-base-color', window.hexToOklch(themeColor));
             document.documentElement.style.setProperty('--theme-accent-foreground', window.themeAccentForeground(themeColor));
-            document.querySelector('meta[name=theme-color]')?.setAttribute('content', isDark ? '#101010' : '#ffffff');
+            document.querySelector('meta[name=theme-color]')?.setAttribute('content', isDark ? '#322424' : '#ebeadd');
         };
         // Single source for the theme controls Alpine state, shared by the
         // Appearance page and the profile dropdown via x-data="themeControls()".
@@ -110,7 +110,7 @@
                 document.documentElement.dataset.theme = this.theme === 'custom' ? 'custom' : (isDark ? 'dark' : 'light');
                 document.documentElement.style.setProperty('--theme-base-color', window.hexToOklch(this.themeColor));
                 document.documentElement.style.setProperty('--theme-accent-foreground', window.themeAccentForeground(this.themeColor));
-                document.querySelector('meta[name=theme-color]')?.setAttribute('content', isDark ? '#101010' : '#ffffff');
+                document.querySelector('meta[name=theme-color]')?.setAttribute('content', isDark ? '#322424' : '#ebeadd');
             },
         });
 
@@ -123,21 +123,20 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex">
-    <meta name="theme-color" content="#101010" id="theme-color-meta" />
+    <meta name="theme-color" content="#322424" id="theme-color-meta" />
     <meta name="color-scheme" content="dark light" />
-    <meta name="Description" content="Coolify: An open-source & self-hostable Heroku / Netlify / Vercel alternative" />
+    <meta name="Description" content="racconify: Deploy and manage your applications and servers." />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:site" content="@coolifyio" />
-    <meta name="twitter:title" content="Coolify" />
+    <meta name="twitter:title" content="racconify" />
     <meta name="twitter:description" content="An open-source & self-hostable Heroku / Netlify / Vercel alternative." />
-    <meta name="twitter:image" content="https://cdn.coollabs.io/og-images/coolify.png" />
+    <meta name="twitter:image" content="{{ asset('racconify.png') }}" />
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://coolify.io" />
-    <meta property="og:title" content="Coolify" />
+    <meta property="og:url" content="{{ url('/') }}" />
+    <meta property="og:title" content="racconify" />
     <meta property="og:description" content="An open-source & self-hostable Heroku / Netlify / Vercel alternative." />
-    <meta property="og:site_name" content="Coolify" />
-    <meta property="og:image" content="https://cdn.coollabs.io/og-images/coolify.png" />
+    <meta property="og:site_name" content="racconify" />
+    <meta property="og:image" content="{{ asset('racconify.png') }}" />
     @use('App\Models\InstanceSettings')
     @php
 
@@ -152,23 +151,21 @@
             }
         }
     @endphp
-    <title>{{ $name }}{{ $title ?? 'Coolify' }}</title>
-    @env('local')
-        <link rel="icon" href="{{ asset('coolify-logo-dev-transparent.png') }}" type="image/png" />
-    @else
-        <link rel="icon" href="{{ asset('favicon.ico') }}" sizes="32x32" />
-        <link rel="icon" href="{{ asset('coolify-logo.svg') }}" type="image/svg+xml" />
-    @endenv
-    <link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}" />
+    <title>{{ str_replace('Coolify', 'racconify', $name . ($title ?? 'racconify')) }}</title>
+    <link rel="icon" href="{{ asset('racconify.png') }}" type="image/png" />
+    <link rel="apple-touch-icon" href="{{ asset('racconify.png') }}" />
     <link rel="manifest" href="{{ asset('site.webmanifest') }}" />
-    <meta name="apple-mobile-web-app-title" content="Coolify" />
+    <meta name="apple-mobile-web-app-title" content="racconify" />
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    <link rel="preconnect" href="https://api.fontshare.com">
+    <link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
+    <link href="https://api.fontshare.com/v2/css?f[]=bevellier@400,500,600,700&amp;display=swap" rel="stylesheet">
     @vite(['resources/js/app.js', 'resources/css/app.css'])
     <script>
         // Update theme-color meta tag (non-critical, can run async)
         const t = localStorage.theme || 'dark';
         const isDark = t === 'dark' || t === 'custom' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
-        document.getElementById('theme-color-meta')?.setAttribute('content', isDark ? '#101010' : '#ffffff');
+        document.getElementById('theme-color-meta')?.setAttribute('content', isDark ? '#322424' : '#ebeadd');
     </script>
     <style>
         [x-cloak] {

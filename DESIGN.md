@@ -38,8 +38,8 @@ The interface is compact and product-focused:
   never heavy borders or a strong floating shadow;
 - full-width data tables for dense collections;
 - outline Reicon glyphs through `<x-reicon>`;
-- the Coolify purple brand accent in light mode;
-- the readable Coolify yellow accent in dark mode;
+- the racconify palette: brown `#322424` and cream `#EBEADD`, with derived surface shades;
+- Bevellier for interface text, delivered by Fontshare, and Geist Mono for logs and code;
 - solid active-item fills (neutral black/white opacity), not accent gradients;
   active state is a flat selected surface with no accent rail;
 - sentence-case labels and headings;

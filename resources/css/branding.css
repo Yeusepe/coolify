@@ -1,0 +1,92 @@
+html[data-theme="dark"],
+html[data-theme="light"] {
+    --racconify-brown: #322424;
+    --racconify-cream: #ebeadd;
+    --color-black: var(--racconify-brown);
+    --color-white: var(--racconify-cream);
+    --color-neutral-50: color-mix(in srgb, #ebeadd 98%, #322424);
+    --color-neutral-100: color-mix(in srgb, #ebeadd 94%, #322424);
+    --color-neutral-200: color-mix(in srgb, #ebeadd 84%, #322424);
+    --color-neutral-300: color-mix(in srgb, #ebeadd 70%, #322424);
+    --color-neutral-400: color-mix(in srgb, #ebeadd 55%, #322424);
+    --color-neutral-500: color-mix(in srgb, #ebeadd 45%, #322424);
+    --color-neutral-600: color-mix(in srgb, #ebeadd 35%, #322424);
+    --color-neutral-700: color-mix(in srgb, #ebeadd 25%, #322424);
+    --color-neutral-800: color-mix(in srgb, #ebeadd 15%, #322424);
+    --color-neutral-900: color-mix(in srgb, #ebeadd 8%, #322424);
+    --color-neutral-950: var(--racconify-brown);
+}
+
+html[data-theme="dark"] {
+    --color-base: #322424;
+    --color-app: #322424;
+    --color-panel: color-mix(in srgb, #322424 96%, #ebeadd);
+    --color-surface: color-mix(in srgb, #322424 96%, #ebeadd);
+    --color-raised: color-mix(in srgb, #322424 92%, #ebeadd);
+    --color-selected: color-mix(in srgb, #322424 88%, #ebeadd);
+    --color-coolgray-100: var(--color-surface);
+    --color-coolgray-200: var(--color-raised);
+    --color-coolgray-300: var(--color-selected);
+    --color-coolgray-400: color-mix(in srgb, #322424 84%, #ebeadd);
+    --color-coolgray-500: color-mix(in srgb, #322424 80%, #ebeadd);
+    --color-fg: #ebeadd;
+    --color-fg-dim: color-mix(in srgb, #ebeadd 88%, #322424);
+    --color-fg-faint: color-mix(in srgb, #ebeadd 75%, #322424);
+    --color-nav-text: var(--color-fg-dim);
+    --color-nav-muted: var(--color-fg-faint);
+    --color-nav-active: #ebeadd;
+    --color-accent: #ebeadd;
+    --color-accent-foreground: #322424;
+    --color-coollabs: #ebeadd;
+    --color-coollabs-50: color-mix(in srgb, #ebeadd 12%, #322424);
+    --color-coollabs-100: #ebeadd;
+    --color-coollabs-200: color-mix(in srgb, #ebeadd 90%, #322424);
+    --color-coollabs-300: color-mix(in srgb, #ebeadd 65%, #322424);
+    --color-warning: #ebeadd;
+    --color-hairline: color-mix(in srgb, #ebeadd 20%, transparent);
+    --color-log: color-mix(in srgb, #322424 98%, #ebeadd);
+    --coollabs-canvas: #322424;
+    --coollabs-elevated: var(--color-surface);
+    --coollabs-recessed: var(--color-selected);
+    --coollabs-base: var(--color-raised);
+    --coollabs-fill: color-mix(in srgb, #322424 86%, #ebeadd);
+    --coollabs-line: color-mix(in srgb, #322424 76%, #ebeadd);
+    --coollabs-hairline: var(--coollabs-line);
+    --coollabs-subtle: var(--color-fg-faint);
+}
+
+html[data-theme="light"] {
+    --color-app: #ebeadd;
+    --color-panel: #ebeadd;
+    --color-fg: #322424;
+    --color-fg-dim: color-mix(in srgb, #322424 88%, #ebeadd);
+    --color-fg-faint: color-mix(in srgb, #322424 75%, #ebeadd);
+    --color-nav-text: #322424;
+    --color-nav-muted: var(--color-fg-faint);
+    --color-nav-active: #322424;
+    --color-accent: #322424;
+    --color-accent-foreground: #ebeadd;
+    --color-coollabs: #322424;
+    --color-coollabs-50: color-mix(in srgb, #ebeadd 90%, #322424);
+    --color-coollabs-100: color-mix(in srgb, #322424 85%, #ebeadd);
+    --color-coollabs-200: #322424;
+    --color-coollabs-300: #322424;
+    --coollabs-canvas: #ebeadd;
+    --coollabs-elevated: #ebeadd;
+    --coollabs-recessed: color-mix(in srgb, #ebeadd 96%, #322424);
+    --coollabs-base: #ebeadd;
+    --coollabs-fill: color-mix(in srgb, #ebeadd 92%, #322424);
+    --coollabs-line: color-mix(in srgb, #ebeadd 75%, #322424);
+    --coollabs-hairline: var(--coollabs-line);
+    --coollabs-subtle: var(--color-fg-faint);
+}
+
+html[data-theme="light"] body {
+    background: #ebeadd;
+    color: #322424;
+}
+
+.racconify-brand-icon {
+    border-radius: 0.45rem;
+    object-fit: contain;
+}
