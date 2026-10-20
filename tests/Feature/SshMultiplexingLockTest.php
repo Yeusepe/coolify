@@ -403,6 +403,17 @@ it('kills only old cloudflared proxies whose stdin pipe no live ssh holds', func
     $tunnelSshPid = proc_get_status($tunnelSsh)['pid'];
     $sshPid = getmypid();
 
+    // Wait for exec to close inherited pipe writers before inspecting which process holds them.
+    foreach ([$reparentedPid, $orphanPid, $tunnelSshPid] as $pid) {
+        for ($attempt = 0; $attempt < 100; $attempt++) {
+            if (trim((string) @file_get_contents("/proc/{$pid}/comm")) === 'sleep') {
+                break;
+            }
+            usleep(10000);
+        }
+        expect(trim((string) file_get_contents("/proc/{$pid}/comm")))->toBe('sleep');
+    }
+
     Process::fake([
         'ps*' => Process::result(output: "{$sshPid} 1 5000 ssh -fN -o ControlMaster=auto root@1.2.3.4\n".
             "200 {$sshPid} 5000 cloudflared access ssh --hostname host.example.com\n".
