@@ -89,6 +89,8 @@ Important consequences:
 - add shared surface overrides to the unlayered block instead of stacking
   `!important` utilities;
 - listbox panels require ancestors with `overflow: visible`;
+- the document root owns page scrolling and horizontal clipping; keep body
+  overflow visible so Safari and sticky descendants share the viewport scroller;
 - anchored cards use `scroll-margin-top: 7rem` to clear the fixed topbar and
   the page's top padding;
 - modal shells reuse the layer-card classes but keep content-width sizing on
