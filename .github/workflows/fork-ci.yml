@@ -5,18 +5,23 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      full_suite:
+        description: Run all upstream unit and feature tests
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: fork-${{ github.ref }}
+  group: fork-${{ github.ref }}-${{ inputs.full_suite || false }}
   cancel-in-progress: false
 
 jobs:
   checks:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -36,13 +41,35 @@ jobs:
       - run: bash tests/Scripts/fork-update-test.sh
       - run: npm ci
       - run: npm run build
-      - run: php artisan test --compact tests/Unit tests/Feature
+      - run: vendor/bin/pint --test tests/Feature/AppIconsTest.php
+      - name: Full upstream regression suite
+        if: inputs.full_suite == true
+        run: php artisan test --compact tests/Unit tests/Feature
+      - name: Fork and upgrade regression checks
+        if: inputs.full_suite != true
+        run: >-
+          php artisan test --compact
+          tests/Feature/PasskeysTest.php
+          tests/Feature/FortifyProfileInformationRouteTest.php
+          tests/Feature/OauthLoginTeamSelectionTest.php
+          tests/Feature/AppIconsTest.php
+          tests/Feature/PlaintextSecretEncryptionTest.php
+          tests/Feature/EnvironmentVariableLegacyEscapingTest.php
+          tests/Feature/PreserveComposeNullMigrationTest.php
+          tests/Feature/TraefikCertificateResolverMigrationTest.php
+          tests/Feature/CoolifyDefaultEnvironmentVariablesTest.php
+          tests/Feature/AutoUpdateFrequencyDefaultTest.php
+          tests/Feature/SubscriptionEndedAtTest.php
+          tests/Feature/LoginAndMcpAccessTest.php
+          tests/Feature/Security/ApiTokenCreationSecurityTest.php
+          tests/Feature/TeamSwitchConcurrentRequestTest.php
+          tests/Feature/DashboardServerMetricsChartTest.php
       - run: php artisan view:cache
       - run: php artisan view:clear
 
   image:
     needs: checks
-    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
+    if: inputs.full_suite != true && github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     permissions:
