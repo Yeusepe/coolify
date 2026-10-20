@@ -167,10 +167,12 @@ class FileStorage extends Component
             $this->fileStorage->content = null;
             $this->fileStorage->is_based_on_git = false;
             $changedFields = auditChangedFields($this->fileStorage);
-            $this->fileStorage->save();
             $this->fileStorage->saveStorageOnServer();
+            $this->fileStorage->save();
             $this->auditFileStorageUpdate($changedFields, 'converted_to_directory');
         } catch (\Throwable $e) {
+            $this->fileStorage->refresh();
+
             return handleError($e, $this);
         } finally {
             $this->dispatch('storageCountsChanged')->to(Storage::class);
@@ -216,10 +218,12 @@ class FileStorage extends Component
                 $this->fileStorage->is_based_on_git = true;
             }
             $changedFields = auditChangedFields($this->fileStorage);
-            $this->fileStorage->save();
             $this->fileStorage->saveStorageOnServer();
+            $this->fileStorage->save();
             $this->auditFileStorageUpdate($changedFields, 'converted_to_file');
         } catch (\Throwable $e) {
+            $this->fileStorage->refresh();
+
             return handleError($e, $this);
         } finally {
             $this->dispatch('storageCountsChanged')->to(Storage::class);
@@ -372,6 +376,7 @@ class FileStorage extends Component
         return view('livewire.project.service.file-storage', [
             'deletionCheckboxes' => $deletionCheckboxes,
             'deletionActions' => $deletionActions,
+            'isYamlFile' => str($this->fileStorage->fs_path)->lower()->endsWith(['.yml', '.yaml']),
         ]);
     }
 }

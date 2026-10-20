@@ -50,12 +50,42 @@ class GithubApp extends BaseModel
         'type' => 'string',
         'webhook_events' => 'array',
         'runner_group_id' => 'integer',
+        'client_secret' => 'encrypted',
+        'webhook_secret' => 'encrypted',
     ];
 
     protected $hidden = [
         'client_secret',
         'webhook_secret',
     ];
+
+    /**
+     * Installation token kept in memory, so one job does not request a new token for each GitHub call.
+     *
+     * @var array{credentials: string, token: string, expires_at: int}|null
+     */
+    private ?array $installationTokenInMemory = null;
+
+    public function installationToken(): string
+    {
+        $credentials = implode('|', [$this->api_url, $this->app_id, $this->installation_id, $this->private_key_id]);
+        $cached = $this->installationTokenInMemory;
+
+        if ($cached && $cached['credentials'] === $credentials && $cached['expires_at'] > now()->getTimestamp()) {
+            return $cached['token'];
+        }
+
+        $token = generateGithubToken($this, 'installation');
+
+        // GitHub installation tokens expire after one hour; renew them well before that.
+        $this->installationTokenInMemory = [
+            'credentials' => $credentials,
+            'token' => $token,
+            'expires_at' => now()->addMinutes(50)->getTimestamp(),
+        ];
+
+        return $token;
+    }
 
     protected static function booted(): void
     {

@@ -11,6 +11,7 @@ use App\Enums\ApplicationDeploymentStatus;
 use App\Enums\ProxyTypes;
 use App\Enums\ServerRole;
 use App\Events\ServerReachabilityChanged;
+use App\Helpers\SshMultiplexingHelper;
 use App\Helpers\SslHelper;
 use App\Jobs\CheckAndStartSentinelJob;
 use App\Jobs\CheckTraefikVersionForServerJob;
@@ -175,6 +176,9 @@ class Server extends BaseModel
         static::saved(function ($server) {
             if ($server->wasChanged('private_key_id') || $server->privateKey?->isDirty()) {
                 refresh_server_connection($server->privateKey);
+            } elseif ($server->wasChanged(['user', 'ip', 'port'])) {
+                // An open multiplexed connection keeps the old user and host until it is closed.
+                SshMultiplexingHelper::removeMuxFile($server);
             }
         });
         static::created(function ($server) {
@@ -667,9 +671,7 @@ class Server extends BaseModel
                                 ],
                                 'service' => 'noop',
                                 'rule' => 'PathPrefix(`/`)',
-                                'tls' => [
-                                    'certResolver' => 'letsencrypt',
-                                ],
+                                'tls' => $this->traefikCertificateResolver() ? ['certResolver' => $this->traefikCertificateResolver()] : [],
                                 'priority' => -1000,
                             ],
                         ],
@@ -806,6 +808,8 @@ class Server extends BaseModel
                 ];
 
                 if ($schema === 'https') {
+                    $certificateResolver = $this->traefikCertificateResolver();
+                    $tls = $certificateResolver ? ['certresolver' => $certificateResolver] : [];
                     $traefik_dynamic_conf['http']['routers']['coolify-http']['middlewares'] = $this->dashboardHttpMiddlewares($settings);
 
                     $traefik_dynamic_conf['http']['routers']['coolify-https'] = [
@@ -817,9 +821,7 @@ class Server extends BaseModel
                         ],
                         'service' => 'coolify',
                         'rule' => "Host(`{$host}`)",
-                        'tls' => [
-                            'certresolver' => 'letsencrypt',
-                        ],
+                        'tls' => $tls,
                     ];
                     $traefik_dynamic_conf['http']['routers']['coolify-reverb-wss'] = [
                         'entryPoints' => [
@@ -827,9 +829,7 @@ class Server extends BaseModel
                         ],
                         'service' => 'coolify-reverb',
                         'rule' => "Host(`{$host}`) && PathPrefix(`/app`)",
-                        'tls' => [
-                            'certresolver' => 'letsencrypt',
-                        ],
+                        'tls' => $tls,
                     ];
                     $traefik_dynamic_conf['http']['routers']['coolify-reverb-api-https'] = [
                         'entryPoints' => [
@@ -837,9 +837,7 @@ class Server extends BaseModel
                         ],
                         'service' => 'coolify-reverb',
                         'rule' => "Host(`{$host}`) && PathPrefix(`/apps`)",
-                        'tls' => [
-                            'certresolver' => 'letsencrypt',
-                        ],
+                        'tls' => $tls,
                     ];
                     $traefik_dynamic_conf['http']['routers']['coolify-terminal-wss'] = [
                         'entryPoints' => [
@@ -847,9 +845,7 @@ class Server extends BaseModel
                         ],
                         'service' => 'coolify-terminal',
                         'rule' => "Host(`{$host}`) && PathPrefix(`/terminal/ws`)",
-                        'tls' => [
-                            'certresolver' => 'letsencrypt',
-                        ],
+                        'tls' => $tls,
                     ];
                 }
                 $yaml = Yaml::dump($traefik_dynamic_conf, 12, 2);
@@ -1167,6 +1163,17 @@ $siteAddress {
     public function isMetricsEnabled(): bool
     {
         return $this->settings->is_metrics_enabled;
+    }
+
+    /**
+     * Traefik certificate resolver for generated HTTPS routers, or null when the proxy uses its own certificates.
+     * A resource value overrides the server value; "none" turns the resolver off.
+     */
+    public function traefikCertificateResolver(?string $resourceResolver = null): ?string
+    {
+        $resolver = filled($resourceResolver) ? $resourceResolver : data_get($this, 'settings.traefik_certificate_resolver');
+
+        return filled($resolver) && $resolver !== ServerSetting::TRAEFIK_CERTIFICATE_RESOLVER_NONE ? $resolver : null;
     }
 
     public function isTrafficAnalyticsEnabled(): bool
@@ -1725,25 +1732,34 @@ $siteAddress {
     public function validateOS(): bool|Stringable
     {
         $os_release = instant_remote_process(['cat /etc/os-release'], $this);
-        $releaseLines = collect(explode("\n", $os_release));
-        $collectedData = collect([]);
-        foreach ($releaseLines as $line) {
-            $item = str($line)->trim();
-            $collectedData->put($item->before('=')->value(), $item->after('=')->lower()->replace('"', '')->value());
-        }
-        $ID = data_get($collectedData, 'ID');
-        // $ID_LIKE = data_get($collectedData, 'ID_LIKE');
-        // $VERSION_ID = data_get($collectedData, 'VERSION_ID');
-        $supported = collect(SUPPORTED_OS)->filter(function ($supportedOs) use ($ID) {
-            if (str($supportedOs)->contains($ID)) {
-                return str($ID);
+
+        return self::supportedOsFromOsRelease($os_release);
+    }
+
+    /**
+     * Match /etc/os-release against SUPPORTED_OS: ID first, then each ID_LIKE token (e.g. Manjaro: ID=manjaro, ID_LIKE=arch).
+     */
+    public static function supportedOsFromOsRelease(?string $osRelease): bool|Stringable
+    {
+        $collectedData = collect(explode("\n", (string) $osRelease))
+            ->mapWithKeys(function ($line) {
+                $item = str($line)->trim();
+
+                return [$item->before('=')->value() => $item->after('=')->lower()->replace(['"', "'"], '')->value()];
+            });
+
+        $candidates = collect([data_get($collectedData, 'ID')])
+            ->merge(explode(' ', (string) data_get($collectedData, 'ID_LIKE')))
+            ->filter();
+
+        foreach ($candidates as $candidate) {
+            $supported = collect(SUPPORTED_OS)->filter(fn ($supportedOs) => str($supportedOs)->contains($candidate));
+            if ($supported->count() === 1) {
+                return str($supported->first());
             }
-        });
-        if ($supported->count() === 1) {
-            return str($supported->first());
-        } else {
-            return false;
         }
+
+        return false;
     }
 
     public function gatherServerMetadata(): ?array

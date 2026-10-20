@@ -36,12 +36,13 @@ jobs:
       - run: bash tests/Scripts/fork-update-test.sh
       - run: npm ci
       - run: npm run build
-      - run: php artisan test --compact tests/Feature/PasskeysTest.php tests/Feature/FortifyProfileInformationRouteTest.php tests/Feature/OauthLoginTeamSelectionTest.php
+      - run: php artisan test --compact tests/Unit tests/Feature
       - run: php artisan view:cache
+      - run: php artisan view:clear
 
   image:
     needs: checks
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     permissions:
@@ -71,4 +72,5 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Promote the completed build for automatic deployment
+        if: github.ref == 'refs/heads/main'
         run: docker buildx imagetools create --tag ghcr.io/yeusepe/coolify:fork-main ghcr.io/yeusepe/coolify:sha-${{ github.sha }}
