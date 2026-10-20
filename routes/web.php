@@ -22,6 +22,7 @@ use App\Livewire\Notifications\Telegram as NotificationTelegram;
 use App\Livewire\Notifications\Webhook as NotificationWebhook;
 use App\Livewire\Profile\Appearance as ProfileAppearance;
 use App\Livewire\Profile\Index as ProfileIndex;
+use App\Livewire\Profile\Passkeys as ProfilePasskeys;
 use App\Livewire\Project\Application\Backup\Index as ApplicationBackupIndex;
 use App\Livewire\Project\Application\Backup\Show as ApplicationBackupShow;
 use App\Livewire\Project\Application\Configuration as ApplicationConfiguration;
@@ -184,6 +185,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->where('provider', '[A-Za-z0-9_-]+')
         ->name('settings.oauth.provider');
     Route::get('/profile', ProfileIndex::class)->name('profile');
+    Route::get('/profile/passkeys', ProfilePasskeys::class)->middleware('password.confirm')->name('profile.passkeys');
     Route::get('/profile/avatar', ProfileAvatarController::class)->name('profile.avatar');
     Route::get('/profile/appearance', ProfileAppearance::class)->name('profile.appearance');
 

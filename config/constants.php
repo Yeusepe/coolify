@@ -9,6 +9,7 @@ return [
         'helper_version' => '1.0.17',
         'self_hosted' => env('SELF_HOSTED', true),
         'autoupdate' => env('AUTOUPDATE'),
+        'fork_managed_updates' => env('FORK_MANAGED_UPDATES', false),
         'base_config_path' => env('BASE_CONFIG_PATH', '/data/coolify'),
         // Development only: Docker volumes that the testing-host server mounts at /data/coolify and /data/coolify/backups.
         // devHostDockerPath() uses them only for that server. The defaults are the legacy docker-compose.dev.yml names.

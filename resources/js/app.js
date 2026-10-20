@@ -2,6 +2,7 @@ import { initializeCopyButtonComponent } from './copy-button.js';
 import { initializeRuntimeLogsComponent } from './runtime-logs.js';
 import { initializeSettingsSidebarAccordionComponent } from './settings-sidebar-accordion.js';
 import { initializeTerminalComponent } from './terminal.js';
+import { initializePasskeysComponent } from './passkeys.js';
 import './traffic-globe.js';
 import { registerLivewireRequestFailureHandler } from './livewire-request-failure.js';
 import { registerLivewireUpdateDedupe } from './livewire-update-dedupe.js';
@@ -27,6 +28,7 @@ document.addEventListener('livewire:navigated', () => {
 // Keeping this registration independent from the current route also makes it
 // available before Alpine processes terminal markup after wire:navigate.
 document.addEventListener('alpine:init', initializeTerminalComponent);
+document.addEventListener('alpine:init', initializePasskeysComponent);
 document.addEventListener('alpine:init', initializeCopyButtonComponent);
 document.addEventListener('alpine:init', initializeRuntimeLogsComponent);
 document.addEventListener('alpine:init', initializeSettingsSidebarAccordionComponent);

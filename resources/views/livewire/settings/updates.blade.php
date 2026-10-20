@@ -1,4 +1,7 @@
 <div>
+    @if (config('constants.coolify.fork_managed_updates'))
+        <p class="mb-4 text-sm text-fg-dim">Updates are managed by your GitHub fork. Tested changes merged into main deploy automatically. Upstream Coolify releases must be merged into the fork first.</p>
+    @endif
     <x-slot:title>
         Update Settings | Coolify
     </x-slot>
