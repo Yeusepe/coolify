@@ -80,8 +80,8 @@ rollback() {
 trap rollback ERR INT TERM
 write_image "$digest"
 "${compose[@]}" up -d --no-deps --force-recreate --wait --wait-timeout 180 coolify
-curl --fail --silent --show-error --max-time 10 http://127.0.0.1:8000/api/health >/dev/null
-curl --fail --silent --show-error --max-time 10 http://127.0.0.1:8000/login >/dev/null
+docker exec coolify curl --fail --silent --show-error --max-time 10 http://127.0.0.1:8080/api/health >/dev/null
+docker exec coolify curl --fail --silent --show-error --max-time 10 http://127.0.0.1:8080/login >/dev/null
 trap - ERR INT TERM
 printf '%s %s %s\n' "$revision" "$digest" "$(date -u +%FT%TZ)" > .fork-deployed
 echo "Deployed $revision. Recovery copy: $backup_dir"
