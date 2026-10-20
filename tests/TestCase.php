@@ -10,6 +10,18 @@ abstract class TestCase extends BaseTestCase
 {
     use CreatesApplication;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Parallel workers must not clean or change permissions on another worker's SSH files.
+        $root = storage_path('framework/testing/ssh/'.getmypid());
+        config([
+            'filesystems.disks.ssh-keys.root' => $root.'/keys',
+            'filesystems.disks.ssh-mux.root' => $root.'/mux',
+        ]);
+    }
+
     /**
      * Laravel flushes the application on tear down but leaves it set as the facade
      * application and container instance. Plain unit tests that mock facades or call
