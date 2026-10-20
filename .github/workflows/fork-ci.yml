@@ -44,7 +44,7 @@ jobs:
       - run: vendor/bin/pint --test tests/Feature/AppIconsTest.php tests/Unit/ApplicationDeploymentJobCommitResolutionTest.php tests/Unit/GithubRunnerContainerTest.php
       - name: Full upstream regression suite
         if: inputs.full_suite == true
-        run: php artisan test --compact --parallel --processes=4 tests/Unit tests/Feature
+        run: php artisan test --compact --parallel --processes=4 --testsuite=Unit,Feature
       - name: Fork and upgrade regression checks
         if: inputs.full_suite != true
         run: >-
