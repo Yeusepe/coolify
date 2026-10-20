@@ -21,8 +21,7 @@ it('uses Livewire navigation after deleting or converting page resources', funct
     'scheduled task' => [
         'app/Livewire/Project/Shared/ScheduledTask/Show.php',
         [
-            "redirectRoute(\$this, 'project.application.scheduled-tasks.show'",
-            "redirectRoute(\$this, 'project.service.scheduled-tasks.show'",
+            'redirectRoute($this, "project.{$this->type}.scheduled-tasks.show", $this->parameters)',
         ],
     ],
     'GitHub source' => [
