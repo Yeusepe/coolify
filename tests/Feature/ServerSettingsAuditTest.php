@@ -58,7 +58,7 @@ beforeEach(function () {
     $this->actingAs($this->user);
     session(['currentTeam' => $this->team]);
 
-    $this->server = Server::factory()->create(['team_id' => $this->team->id]);
+    $this->server = Server::factory()->create(['team_id' => $this->team->id, 'name' => 'Audit server', 'ip' => '203.0.113.10']);
 });
 
 afterEach(function () {
@@ -133,7 +133,8 @@ test('server settings saves record changed setting names without the sentinel to
         ->set('wildcardDomain', 'https://apps.example.com')
         ->set('sentinelToken', $newToken)
         ->call('submit')
-        ->assertHasNoErrors();
+        ->assertHasNoErrors()
+        ->assertNotDispatched('error');
 
     $rows = serverSettingsAuditRows('ui.server.settings_updated');
     expect($rows)->toHaveCount(1)
@@ -145,7 +146,8 @@ test('server settings saves record changed setting names without the sentinel to
 test('saving server settings without changes records no event', function () {
     Livewire::test(ServerShow::class, ['server_uuid' => $this->server->uuid])
         ->call('submit')
-        ->assertHasNoErrors();
+        ->assertHasNoErrors()
+        ->assertNotDispatched('error');
 
     expect(serverSettingsAuditRows('ui.server.settings_updated'))->toBeEmpty();
 });

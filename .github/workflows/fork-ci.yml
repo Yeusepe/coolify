@@ -51,6 +51,7 @@ jobs:
           tests/Feature/Authorization/ResourceHeadingAuthorizationTest.php
           tests/Feature/RedisUsernameEnvironmentVariableTest.php tests/Feature/StandaloneSqliteTest.php
           tests/Unit/ProductionImageWorkflowTest.php
+          tests/Feature/ServerSettingsAuditTest.php
       - name: Full upstream regression suite
         if: inputs.full_suite == true
         run: php artisan test --compact --parallel --processes=4 --testsuite=Unit,Feature
@@ -87,6 +88,7 @@ jobs:
           tests/Feature/RedisUsernameEnvironmentVariableTest.php
           tests/Feature/StandaloneSqliteTest.php
           tests/Feature/ServerProxyConfigurationAuthorizationTest.php
+          tests/Feature/ServerSettingsAuditTest.php
       - run: php artisan view:cache
       - run: php artisan view:clear
 
