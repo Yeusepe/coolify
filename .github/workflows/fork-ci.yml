@@ -41,7 +41,16 @@ jobs:
       - run: bash tests/Scripts/fork-update-test.sh
       - run: npm ci
       - run: npm run build
-      - run: vendor/bin/pint --test tests/Feature/AppIconsTest.php tests/Unit/ApplicationDeploymentJobCommitResolutionTest.php tests/Unit/GithubRunnerContainerTest.php
+      - run: >-
+          vendor/bin/pint --test app/Livewire/Server/Proxy.php
+          tests/Feature/AppIconsTest.php tests/Unit/ApplicationDeploymentJobCommitResolutionTest.php
+          tests/Unit/GithubRunnerContainerTest.php tests/Unit/LivewireInternalRedirectTest.php
+          tests/Feature/DevelopmentQemuVmTest.php tests/Feature/ReverbOpenFileLimitTest.php
+          tests/Feature/DevScriptTest.php tests/Feature/Ipv6ServerAddressUrlTest.php
+          tests/Feature/ApplicationGeneralBuildpackSelectorTest.php
+          tests/Feature/Authorization/ResourceHeadingAuthorizationTest.php
+          tests/Feature/RedisUsernameEnvironmentVariableTest.php tests/Feature/StandaloneSqliteTest.php
+          tests/Unit/ProductionImageWorkflowTest.php
       - name: Full upstream regression suite
         if: inputs.full_suite == true
         run: php artisan test --compact --parallel --processes=4 --testsuite=Unit,Feature
@@ -66,6 +75,18 @@ jobs:
           tests/Feature/DashboardServerMetricsChartTest.php
           tests/Unit/ApplicationDeploymentJobCommitResolutionTest.php
           tests/Unit/GithubRunnerContainerTest.php
+          tests/Unit/LivewireInternalRedirectTest.php
+          tests/Unit/LivewireSyncDataAuthorizationTest.php
+          tests/Unit/ProductionImageWorkflowTest.php
+          tests/Feature/DevelopmentQemuVmTest.php
+          tests/Feature/ReverbOpenFileLimitTest.php
+          tests/Feature/DevScriptTest.php
+          tests/Feature/Ipv6ServerAddressUrlTest.php
+          tests/Feature/ApplicationGeneralBuildpackSelectorTest.php
+          tests/Feature/Authorization/ResourceHeadingAuthorizationTest.php
+          tests/Feature/RedisUsernameEnvironmentVariableTest.php
+          tests/Feature/StandaloneSqliteTest.php
+          tests/Feature/ServerProxyConfigurationAuthorizationTest.php
       - run: php artisan view:cache
       - run: php artisan view:clear
 

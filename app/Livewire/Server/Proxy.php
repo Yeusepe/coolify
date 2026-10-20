@@ -177,6 +177,7 @@ class Proxy extends Component
 
     private function saveSettings(): void
     {
+        $this->authorize('update', $this->server);
         $this->syncData(true);
         $changedFields = auditChangedFields($this->server->settings);
         $this->server->settings->save();
