@@ -147,7 +147,7 @@ it('fails pull request jobs in the job-started hook and lets other jobs run', fu
     $hook = tempnam(sys_get_temp_dir(), 'hook');
     file_put_contents($hook, GithubRunnerContainer::pullRequestHookScript());
 
-    $environment = $eventName === null ? [] : ['GITHUB_EVENT_NAME' => $eventName];
+    $environment = ['GITHUB_EVENT_NAME' => $eventName ?? false];
     $process = new Process(['bash', $hook], env: ['PATH' => getenv('PATH'), ...$environment]);
     $process->run();
     unlink($hook);

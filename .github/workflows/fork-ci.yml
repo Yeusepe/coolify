@@ -41,7 +41,7 @@ jobs:
       - run: bash tests/Scripts/fork-update-test.sh
       - run: npm ci
       - run: npm run build
-      - run: vendor/bin/pint --test tests/Feature/AppIconsTest.php
+      - run: vendor/bin/pint --test tests/Feature/AppIconsTest.php tests/Unit/ApplicationDeploymentJobCommitResolutionTest.php tests/Unit/GithubRunnerContainerTest.php
       - name: Full upstream regression suite
         if: inputs.full_suite == true
         run: php artisan test --compact --stop-on-failure tests/Unit tests/Feature
@@ -64,6 +64,8 @@ jobs:
           tests/Feature/Security/ApiTokenCreationSecurityTest.php
           tests/Feature/TeamSwitchConcurrentRequestTest.php
           tests/Feature/DashboardServerMetricsChartTest.php
+          tests/Unit/ApplicationDeploymentJobCommitResolutionTest.php
+          tests/Unit/GithubRunnerContainerTest.php
       - run: php artisan view:cache
       - run: php artisan view:clear
 
