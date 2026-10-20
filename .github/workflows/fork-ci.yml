@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: fork-${{ github.ref }}-${{ inputs.full_suite || false }}
+  group: fork-${{ github.ref }}-${{ inputs.full_suite && github.sha || 'focused' }}
   cancel-in-progress: false
 
 jobs:
