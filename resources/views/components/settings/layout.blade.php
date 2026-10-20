@@ -16,7 +16,7 @@
 <section class="application-settings-workspace w-full max-w-none">
     <header class="settings-mobile-header xl:hidden">
         <h1 class="settings-mobile-title">Instance Settings</h1>
-        <p class="settings-mobile-description">Configure global settings for this Coolify instance.</p>
+        <p class="settings-mobile-description">Configure global settings for this racconify instance.</p>
     </header>
     <div class="grid min-w-0 gap-8 xl:grid-cols-[210px_minmax(0,1fr)] xl:gap-8">
         <aside class="application-settings-navigation min-w-0 xl:self-start"

@@ -1,4 +1,5 @@
 @import "./fonts.css" layer(base);
+@import "./branding.css";
 
 @import "tailwindcss";
 @import "tw-animate-css";
@@ -15,9 +16,9 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-    --font-sans: 'Geist Sans', Inter, sans-serif;
+    --font-sans: 'Bevellier', 'Geist Sans', Inter, sans-serif;
     --font-mono: 'Geist Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-    --font-geist-sans: 'Geist Sans', Inter, sans-serif;
+    --font-geist-sans: 'Bevellier', 'Geist Sans', Inter, sans-serif;
     --font-logs: 'Geist Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
 
     --color-base: oklch(17.3% 0 0);
