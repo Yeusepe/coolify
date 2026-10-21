@@ -1,0 +1,60 @@
+name: Security vendor OS packages
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, security/control-node-runtime]
+    paths: ['docker/security/vendor-os/**', '.github/workflows/security-vendor-os.yml']
+permissions:
+  contents: read
+  packages: write
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        include:
+          - name: supavisor
+            base: supabase/supavisor@sha256:07f1a6098ffc04b80263bca4eb5c3e7bd2e03dfd1fc465aa108d7329000a1a4e
+            user: '0'
+          - name: realtime
+            base: supabase/realtime@sha256:768b559241dd234c4e8852c5c0f504e598b80f1df2ad4dd78d5486fbed2f17a2
+            user: nobody
+          - name: functions
+            base: supabase/edge-runtime@sha256:ad45164b7548bf5820ed7be714789c17ac2865edce79a09cfb4c3756c3d365a8
+            user: '0'
+          - name: meta
+            base: supabase/postgres-meta@sha256:145325b7e39f8ef4931d6e8cfd3f6f4d655de09d72a2ccc96d9513542c2202bd
+            user: '0'
+          - name: storage
+            base: supabase/storage-api@sha256:98ffec5d0678803783c30e404c27f4ec65e97efbe014088f2a86b4b8b54b9f54
+            user: '0'
+          - name: auth
+            base: supabase/gotrue@sha256:1736a63078f5922b198c4cbe50f80ab9a2d3b54fe8b7b6cfb2e9dc5dbbc12c6b
+            user: supabase
+          - name: imgproxy
+            base: darthsim/imgproxy@sha256:73c5dda13199745b0d2d00e4149d4a589c5b2e205dbf335ca05eca8276b54712
+            user: '999'
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: .
+          file: docker/security/vendor-os/Dockerfile
+          push: true
+          tags: ghcr.io/yeusepe/coolify:security-${{ matrix.name }}-20261020
+          build-args: |
+            BASE_IMAGE=${{ matrix.base }}
+            RUNTIME_USER=${{ matrix.user }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/Yeusepe/coolify
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.base.name=${{ matrix.base }}
