@@ -10,8 +10,8 @@ ARG CLOUDFLARED_VERSION=2026.10.2
 ARG POSTGRES_VERSION=18
 # https://nginx.org/en/linux_packages.html
 ARG NGINX_VERSION=1.31.2-r1
-# https://pecl.php.net/package/uv
-ARG PHP_UV_VERSION=0.3.0
+# uv 0.3.0 source, pinned to avoid intermittent PECL download failures.
+ARG PHP_UV_SOURCE=amphp/ext-uv@1d18f5d1d12e77c24b6b0b9d69194b1051efae66
 
 # Add user/group
 ARG USER_ID=9999
@@ -102,7 +102,7 @@ ARG TARGETPLATFORM
 ARG POSTGRES_VERSION
 ARG CLOUDFLARED_VERSION
 ARG NGINX_VERSION
-ARG PHP_UV_VERSION
+ARG PHP_UV_SOURCE
 ARG COOLIFY_VERSION
 ARG CI=true
 
@@ -147,10 +147,13 @@ RUN --mount=type=cache,target=/var/cache/apk \
     vim
 
 COPY --from=terminal-node /usr/local/bin/node /usr/local/bin/node
+COPY docker/security/bun/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+RUN mkdir -p /run/security/empty-ca-directory
+ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt SSL_CERT_DIR=/run/security/empty-ca-directory NODE_OPTIONS=--use-openssl-ca
 
 # Install PHP extensions
 # uv: Reverb uses an ext-uv event loop instead of stream_select(), which fails at 1024 open files (FD_SETSIZE)
-RUN install-php-extensions uv-${PHP_UV_VERSION}
+RUN install-php-extensions "${PHP_UV_SOURCE}"
 
 # Configure shell aliases
 RUN echo "alias ll='ls -al'" >> /etc/profile && \
@@ -169,9 +172,6 @@ RUN mkdir -p /usr/local/bin && \
 # Configure PHP
 COPY docker/production/etc/php/conf.d/zzz-custom-php.ini /usr/local/etc/php/conf.d/zzz-custom-php.ini
 ENV PHP_OPCACHE_ENABLE=1
-COPY docker/security/bun/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
-RUN mkdir -p /run/security/empty-ca-directory
-ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt SSL_CERT_DIR=/run/security/empty-ca-directory NODE_OPTIONS=--use-openssl-ca
 
 # Configure entrypoint
 COPY --chmod=755 docker/production/entrypoint.d/ /etc/entrypoint.d
