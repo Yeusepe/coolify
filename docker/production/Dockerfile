@@ -2,6 +2,7 @@
 # https://hub.docker.com/r/serversideup/php/tags?name=8.4-fpm-nginx-alpine
 # Pinned: v5 moved user bundles to /etc/s6-overlay/user-bundles.d and breaks startup (#12141)
 ARG PHP_BASE_IMAGE=ghcr.io/yeusepe/coolify:php-security-20261020@sha256:6f3ff0098b581e4bd5a4f926051afdece7bc4818425ef17320b6d0ca323d1a4c
+ARG TERMINAL_NODE_IMAGE=node:24.22.0-alpine3.23@sha256:e44c87c7dd212720eb00469aeac89504ca2be77b8f0d6dbffb30665d5fcc59e1
 # https://github.com/cloudflare/cloudflared/releases
 ARG CLOUDFLARED_VERSION=2026.10.2
 # https://www.postgresql.org/support/versioning/
@@ -72,10 +73,13 @@ FROM quay.io/minio/aistor/mc:RELEASE.2026-09-06T02-44-40Z AS minio-client
 # =================================================================
 # Stage 4: Terminal dependencies (match the production Node.js ABI and libc)
 # =================================================================
+FROM ${TERMINAL_NODE_IMAGE} AS terminal-node
+
 FROM ${PHP_BASE_IMAGE} AS terminal-dependencies
 
 USER root
 
+COPY --from=terminal-node /usr/local/bin/node /usr/local/bin/node
 RUN apk upgrade && \
     apk add --no-cache nodejs npm make g++ python3
 COPY docker/coolify-terminal/package*.json /terminal/
@@ -133,7 +137,7 @@ RUN --mount=type=cache,target=/var/cache/apk \
     apk upgrade && \
     apk add --no-cache \
     postgresql${POSTGRES_VERSION}-client \
-    nodejs \
+    libstdc++ \
     openssh-client \
     git \
     git-lfs \
@@ -141,6 +145,8 @@ RUN --mount=type=cache,target=/var/cache/apk \
     lsof \
     procps \
     vim
+
+COPY --from=terminal-node /usr/local/bin/node /usr/local/bin/node
 
 # Install PHP extensions
 # uv: Reverb uses an ext-uv event loop instead of stream_select(), which fails at 1024 open files (FD_SETSIZE)
