@@ -1,7 +1,8 @@
 name: Security PHP base
 on:
+  workflow_dispatch:
   push:
-    branches: [security/certificate-trust]
+    branches: [main, security/certificate-trust]
     paths: ['.github/workflows/security-php.yml']
 permissions:
   contents: read

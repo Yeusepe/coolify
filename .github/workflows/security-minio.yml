@@ -1,7 +1,8 @@
 name: Security MinIO
 on:
+  workflow_dispatch:
   push:
-    branches: [security/certificate-trust]
+    branches: [main, security/certificate-trust]
     paths: ['docker/security/minio/**', '.github/workflows/security-minio.yml']
 permissions:
   contents: read

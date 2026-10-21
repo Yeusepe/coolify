@@ -1,7 +1,8 @@
 name: Security Studio
 on:
+  workflow_dispatch:
   push:
-    branches: [security/certificate-trust]
+    branches: [main, security/certificate-trust]
     paths: ['.github/workflows/security-studio.yml']
 permissions:
   contents: read
