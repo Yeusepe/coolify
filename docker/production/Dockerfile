@@ -1,9 +1,9 @@
 # Versions
 # https://hub.docker.com/r/serversideup/php/tags?name=8.4-fpm-nginx-alpine
 # Pinned: v5 moved user bundles to /etc/s6-overlay/user-bundles.d and breaks startup (#12141)
-ARG SERVERSIDEUP_PHP_VERSION=8.4-fpm-nginx-alpine-v4.5.1
+ARG PHP_BASE_IMAGE=ghcr.io/yeusepe/coolify:php-security-20261020@sha256:6f3ff0098b581e4bd5a4f926051afdece7bc4818425ef17320b6d0ca323d1a4c
 # https://github.com/cloudflare/cloudflared/releases
-ARG CLOUDFLARED_VERSION=2026.7.3
+ARG CLOUDFLARED_VERSION=2026.10.2
 # https://www.postgresql.org/support/versioning/
 # Note: We are using version 18 of the postgres client (while still using postgres 15 for the postgres server) as version 15 has been removed from Alpine 3.23+ https://pkgs.alpinelinux.org/packages?name=postgresql*-client&branch=v3.23&repo=&arch=x86_64&origin=&flagged=&maintainer=
 ARG POSTGRES_VERSION=18
@@ -19,7 +19,7 @@ ARG GROUP_ID=9999
 # =================================================================
 # Stage 1: Composer dependencies
 # =================================================================
-FROM serversideup/php:${SERVERSIDEUP_PHP_VERSION} AS base
+FROM ${PHP_BASE_IMAGE} AS base
 
 USER root
 
@@ -41,6 +41,9 @@ ARG GROUP_ID
 
 RUN docker-php-serversideup-set-id www-data $USER_ID:$GROUP_ID && \
     docker-php-serversideup-set-file-permissions --owner $USER_ID:$GROUP_ID --service nginx
+
+COPY docker/security/bun/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt SSL_CERT_DIR=/run/security/empty-ca-directory
 
 WORKDIR /var/www/html
 COPY --chown=www-data:www-data composer.json composer.lock ./
@@ -69,7 +72,7 @@ FROM quay.io/minio/aistor/mc:RELEASE.2026-09-06T02-44-40Z AS minio-client
 # =================================================================
 # Stage 4: Terminal dependencies (match the production Node.js ABI and libc)
 # =================================================================
-FROM serversideup/php:${SERVERSIDEUP_PHP_VERSION} AS terminal-dependencies
+FROM ${PHP_BASE_IMAGE} AS terminal-dependencies
 
 USER root
 
@@ -87,7 +90,7 @@ COPY docker/coolify-terminal/terminal-utils.js /terminal/terminal-utils.js
 # =================================================================
 # Final Stage: Production image
 # =================================================================
-FROM serversideup/php:${SERVERSIDEUP_PHP_VERSION}
+FROM ${PHP_BASE_IMAGE}
 
 ARG USER_ID
 ARG GROUP_ID
@@ -151,15 +154,18 @@ RUN echo "alias ll='ls -al'" >> /etc/profile && \
 # Install Cloudflared based on architecture
 RUN mkdir -p /usr/local/bin && \
     if [ "${TARGETPLATFORM}" = "linux/amd64" ]; then \
-    curl -sSL "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64" -o /usr/local/bin/cloudflared; \
+    curl -fsSL "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64" -o /usr/local/bin/cloudflared; \
     elif [ "${TARGETPLATFORM}" = "linux/arm64" ]; then \
-    curl -sSL "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-arm64" -o /usr/local/bin/cloudflared; \
+    curl -fsSL "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-arm64" -o /usr/local/bin/cloudflared; \
     fi && \
     chmod +x /usr/local/bin/cloudflared
 
 # Configure PHP
 COPY docker/production/etc/php/conf.d/zzz-custom-php.ini /usr/local/etc/php/conf.d/zzz-custom-php.ini
 ENV PHP_OPCACHE_ENABLE=1
+COPY docker/security/bun/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+RUN mkdir -p /run/security/empty-ca-directory
+ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt SSL_CERT_DIR=/run/security/empty-ca-directory NODE_OPTIONS=--use-openssl-ca
 
 # Configure entrypoint
 COPY --chmod=755 docker/production/entrypoint.d/ /etc/entrypoint.d
