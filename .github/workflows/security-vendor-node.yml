@@ -1,0 +1,42 @@
+name: Security vendor Node libraries
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, security/vendor-node-patches]
+    paths: ['docker/security/vendor-node/**', '.github/workflows/security-vendor-node.yml']
+permissions:
+  contents: read
+  packages: write
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: meta
+            base: ghcr.io/yeusepe/coolify@sha256:b583f6c73d33af3a1683d924bfd7c43547b0d37d4bdbaabebe64c13b25429d37
+          - name: storage
+            base: ghcr.io/yeusepe/coolify@sha256:90b9aa111d0ffcb21c3e4389ad93e89c0dd1ac189dbb2b96de4e3a846685d585
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: .
+          file: docker/security/vendor-node/Dockerfile
+          push: true
+          tags: ghcr.io/yeusepe/coolify:security-${{ matrix.name }}-node-20261020
+          build-args: |
+            BASE_IMAGE=${{ matrix.base }}
+            SECURITY_PROFILE=${{ matrix.name }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/Yeusepe/coolify
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.base.name=${{ matrix.base }}
