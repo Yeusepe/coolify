@@ -1,13 +1,10 @@
 ARG BASE_IMAGE
+ARG NODE_IMAGE
+FROM ${NODE_IMAGE} AS patched-node
 FROM ${BASE_IMAGE}
-ARG SECURITY_PROFILE
 USER 0
+# The pinned base retains the existing application and dependency security patches.
+COPY --from=patched-node /usr/local/bin/node /usr/local/bin/node
+COPY docker/security/bun/brotli-regression.cjs /tmp/brotli-regression.cjs
+RUN node /tmp/brotli-regression.cjs && rm /tmp/brotli-regression.cjs
 ENV NODE_OPTIONS=--use-openssl-ca
-COPY docker/security/vendor-node/patch.cjs /tmp/racconify-patch.cjs
-RUN if [ "$SECURITY_PROFILE" = meta ]; then \
-      npm install --prefix /tmp/runtime-security --install-strategy=nested --ignore-scripts --omit=dev --no-audit --no-fund piscina@5.3.2 proxy-addr@2.0.8 tinypool@2.1.2; \
-    elif [ "$SECURITY_PROFILE" = storage ]; then \
-      npm install --prefix /tmp/runtime-security --install-strategy=nested --ignore-scripts --omit=dev --no-audit --no-fund fastify@5.12.7 undici@7.29.1; \
-    else exit 1; fi && \
-    node /tmp/racconify-patch.cjs "$SECURITY_PROFILE" && \
-    rm -rf /tmp/runtime-security /tmp/racconify-patch.cjs /root/.npm /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx

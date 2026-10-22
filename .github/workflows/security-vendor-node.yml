@@ -2,8 +2,8 @@ name: Security vendor Node libraries
 on:
   workflow_dispatch:
   push:
-    branches: [main, security/vendor-node-patches]
-    paths: ['docker/security/vendor-node/**', '.github/workflows/security-vendor-node.yml']
+    branches: [main, security/vendor-node-patches, security/node-brotli-20261021]
+    paths: ['docker/security/vendor-node/**', '.github/workflows/security-vendor-node.yml', 'docker/security/bun/brotli-regression.cjs']
 permissions:
   contents: read
   packages: write
@@ -16,9 +16,11 @@ jobs:
       matrix:
         include:
           - name: meta
-            base: ghcr.io/yeusepe/coolify@sha256:b583f6c73d33af3a1683d924bfd7c43547b0d37d4bdbaabebe64c13b25429d37
+            base: ghcr.io/yeusepe/coolify@sha256:01ec5b5cdefabaab5a32ab8686ac93b006a9b8e890017d8df4fb6482afd1da70
+            node: node:22.23.4-bookworm-slim@sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d
           - name: storage
-            base: ghcr.io/yeusepe/coolify@sha256:90b9aa111d0ffcb21c3e4389ad93e89c0dd1ac189dbb2b96de4e3a846685d585
+            base: ghcr.io/yeusepe/coolify@sha256:df6b95dfd5a613383a5729f701c326619b9ec2c89e3e95343dfafb52fa1e1521
+            node: node:24.22.1-alpine3.23@sha256:0468540aa58203ff9e40c2aab3907c52644ab818af6176b1c70a026137dc92a2
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
@@ -32,10 +34,10 @@ jobs:
           context: .
           file: docker/security/vendor-node/Dockerfile
           push: true
-          tags: ghcr.io/yeusepe/coolify:security-${{ matrix.name }}-node-20261020
+          tags: ghcr.io/yeusepe/coolify:security-${{ matrix.name }}-node-20261021
           build-args: |
             BASE_IMAGE=${{ matrix.base }}
-            SECURITY_PROFILE=${{ matrix.name }}
+            NODE_IMAGE=${{ matrix.node }}
           labels: |
             org.opencontainers.image.source=https://github.com/Yeusepe/coolify
             org.opencontainers.image.revision=${{ github.sha }}

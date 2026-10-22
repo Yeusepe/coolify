@@ -2,7 +2,7 @@ name: Security runtime
 on:
   workflow_dispatch:
   push:
-    branches: [main, security/certificate-trust]
+    branches: [main, security/certificate-trust, security/node-brotli-20261021]
     paths: ['docker/security/bun/**', '.github/workflows/security-runtime.yml']
 permissions:
   contents: read
@@ -23,7 +23,7 @@ jobs:
         with:
           context: docker/security/bun
           push: true
-          tags: ghcr.io/yeusepe/coolify:bun-trust-20261020
+          tags: ghcr.io/yeusepe/coolify:bun-security-20261021
           labels: |
             org.opencontainers.image.source=https://github.com/Yeusepe/coolify
             org.opencontainers.image.revision=${{ github.sha }}
