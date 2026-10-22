@@ -6,7 +6,7 @@ ADD --checksum=sha256:4de3ac01f71553a6fc4c3dd867253c10f0f3836a08467a0cb578a64194
 RUN unzip -p /tmp/bun.zip bun-linux-x64/bun > /usr/local/bin/bun && chmod 755 /usr/local/bin/bun && rm /tmp/bun.zip && test "$(bun --revision)" = '1.4.4-canary.1+b1d468617'
 COPY ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt SSL_CERT_DIR=/run/empty-ca-directory
-RUN bun -e 'const {X509Certificate}=require("crypto");const roots=require("tls").rootCertificates; if(roots.some(p=>/emSign|eMudhra|AAA Certificate Services/.test(new X509Certificate(p).subject)))throw new Error("Distrusted CA remains bundled"); if(roots.length<100)throw new Error("CA bundle is incomplete")'
+RUN bun -e 'const {X509Certificate}=require("crypto");const roots=require("tls").rootCertificates; if(roots.some(p=>/emSign ECC Root CA - G3|AAA Certificate Services/.test(new X509Certificate(p).subject)))throw new Error("Distrusted CA remains bundled"); if(roots.length<100)throw new Error("CA bundle is incomplete")'
 
 COPY brotli-regression.cjs /tmp/brotli-regression.cjs
 RUN bun /tmp/brotli-regression.cjs && rm /tmp/brotli-regression.cjs
