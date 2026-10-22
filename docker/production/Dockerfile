@@ -2,7 +2,7 @@
 # https://hub.docker.com/r/serversideup/php/tags?name=8.4-fpm-nginx-alpine
 # Pinned: v5 moved user bundles to /etc/s6-overlay/user-bundles.d and breaks startup (#12141)
 ARG PHP_BASE_IMAGE=ghcr.io/yeusepe/coolify:php-security-20261020@sha256:6f3ff0098b581e4bd5a4f926051afdece7bc4818425ef17320b6d0ca323d1a4c
-ARG TERMINAL_NODE_IMAGE=node:24.22.0-alpine3.23@sha256:e44c87c7dd212720eb00469aeac89504ca2be77b8f0d6dbffb30665d5fcc59e1
+ARG TERMINAL_NODE_IMAGE=node:24.22.1-alpine3.23@sha256:0468540aa58203ff9e40c2aab3907c52644ab818af6176b1c70a026137dc92a2
 # https://github.com/cloudflare/cloudflared/releases
 ARG CLOUDFLARED_VERSION=2026.10.2
 # https://www.postgresql.org/support/versioning/
@@ -56,7 +56,7 @@ USER www-data
 # =================================================================
 # Stage 2: Frontend assets compilation
 # =================================================================
-FROM node:24-alpine AS static-assets
+FROM ${TERMINAL_NODE_IMAGE} AS static-assets
 
 WORKDIR /app
 COPY package*.json vite.config.js postcss.config.cjs ./
@@ -80,6 +80,8 @@ FROM ${PHP_BASE_IMAGE} AS terminal-dependencies
 USER root
 
 COPY --from=terminal-node /usr/local/bin/node /usr/local/bin/node
+COPY docker/security/bun/brotli-regression.cjs /tmp/brotli-regression.cjs
+RUN node /tmp/brotli-regression.cjs && rm /tmp/brotli-regression.cjs
 RUN apk upgrade && \
     apk add --no-cache nodejs npm make g++ python3
 COPY docker/coolify-terminal/package*.json /terminal/
@@ -147,6 +149,8 @@ RUN --mount=type=cache,target=/var/cache/apk \
     vim
 
 COPY --from=terminal-node /usr/local/bin/node /usr/local/bin/node
+COPY docker/security/bun/brotli-regression.cjs /tmp/brotli-regression.cjs
+RUN node /tmp/brotli-regression.cjs && rm /tmp/brotli-regression.cjs
 COPY docker/security/bun/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 RUN mkdir -p /run/security/empty-ca-directory
 ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt SSL_CERT_DIR=/run/security/empty-ca-directory NODE_OPTIONS=--use-openssl-ca
