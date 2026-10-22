@@ -80,10 +80,10 @@ FROM ${PHP_BASE_IMAGE} AS terminal-dependencies
 USER root
 
 COPY --from=terminal-node /usr/local/bin/node /usr/local/bin/node
-COPY docker/security/bun/brotli-regression.cjs /tmp/brotli-regression.cjs
-RUN node /tmp/brotli-regression.cjs && rm /tmp/brotli-regression.cjs
 RUN apk upgrade && \
     apk add --no-cache nodejs npm make g++ python3
+COPY docker/security/bun/brotli-regression.cjs /tmp/brotli-regression.cjs
+RUN node /tmp/brotli-regression.cjs && rm /tmp/brotli-regression.cjs
 COPY docker/coolify-terminal/package*.json /terminal/
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --prefix /terminal && \
