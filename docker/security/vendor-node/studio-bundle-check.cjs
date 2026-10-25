@@ -24,7 +24,7 @@ function walk(root) {
       assert(/return [\w$]+/.test(exact), 'Missing exact upper-bound exit: '+file);
       const maximum = text.slice(max, async);
       // Minifiers may fold the final branch into `condition ? (issue(), INVALID) : ...`.
-      assert(!/\.dirty\(\)/.test(maximum) && (/return [\w$]+/.test(maximum) || /\),[\w$]+[);:]/.test(maximum)), 'Missing maximum upper-bound exit: '+file+' '+maximum.slice(-200));
+      assert(!/\.dirty\(\)/.test(maximum) && (/return [\w$]+/.test(maximum) || /\),[\w$]+(?:\.INVALID)?[);:]/.test(maximum)), 'Missing maximum upper-bound exit: '+file+' '+maximum.slice(-200));
       checked++;
       offset = element;
     }
