@@ -2,8 +2,13 @@
 
 use App\Jobs\ServerVulnerabilityCheckJob;
 use App\Livewire\Server\Security\Vulnerabilities;
+use App\Models\Application;
+use App\Models\Environment;
 use App\Models\InstanceSettings;
+use App\Models\Project;
 use App\Models\Server;
+use App\Models\Service;
+use App\Models\StandaloneDocker;
 use App\Models\Team;
 use App\Models\User;
 use App\Notifications\Server\VulnerabilitiesFound;
@@ -103,6 +108,7 @@ it('keeps uncertain runtime advisories visible without urgent notifications', fu
     Http::fake([
         'cve.now/feed*' => Http::response(['items' => [['id' => 'CVE-2026-12345']]]),
         'cve.now/api/v1/entries/CVE-2026-12345' => Http::response(['id' => 'CVE-2026-12345', 'title' => 'Review needed', 'severity' => ['cvss' => 9.8], 'affected' => [['product' => 'PHP', 'ranges' => []]]]),
+        'www.php.net/releases/*' => Http::response(['version' => '8.4.27']),
     ]);
     $service = $this->partialMock(CveNowService::class, fn ($mock) => $mock->shouldReceive('collect')->andReturn(['packages' => [], 'runtimes' => [['name' => 'php', 'version' => '8.4.27', 'container' => 'control']], 'containers' => [], 'warnings' => []]));
 
@@ -111,4 +117,23 @@ it('keeps uncertain runtime advisories visible without urgent notifications', fu
     expect($service->report($server)['findings'])->toHaveCount(1)
         ->and($service->report($server)['notified'])->toBe([]);
     Notification::assertNothingSent();
+});
+
+it('maps container versions to owned applications and service names without disclosing another team', function () {
+    $server = cveMonitoringServer();
+    $project = Project::factory()->create(['team_id' => $server->team_id]);
+    $environment = Environment::factory()->create(['project_id' => $project->id]);
+    $destination = $server->standaloneDockers()->firstOrFail();
+    $application = Application::factory()->create(['name' => 'Creator Payments', 'environment_id' => $environment->id, 'destination_id' => $destination->id, 'destination_type' => StandaloneDocker::class]);
+    $service = Service::factory()->create(['name' => 'Payments infrastructure', 'environment_id' => $environment->id, 'server_id' => $server->id]);
+    $otherProject = Project::factory()->create(['team_id' => Team::factory()->create()->id]);
+    $otherEnvironment = Environment::factory()->create(['project_id' => $otherProject->id]);
+    $other = Application::factory()->create(['name' => 'Other team private app', 'environment_id' => $otherEnvironment->id, 'destination_id' => $destination->id, 'destination_type' => StandaloneDocker::class]);
+    $inventory = ['packages' => [['name' => 'next', 'version' => '16.4.2', 'ecosystem' => 'npm', 'container' => $application->uuid.'-20261025']], 'runtimes' => [['name' => 'redis', 'version' => '7.4.8', 'container' => 'redis-'.$service->uuid]], 'containers' => [['name' => $other->uuid, 'image' => 'private-image']]];
+
+    $identified = app(CveNowService::class)->identifyResources($server, $inventory);
+
+    expect($identified['packages'][0]['container'])->toBe('Creator Payments');
+    expect($identified['runtimes'][0]['container'])->toBe('Payments infrastructure / redis');
+    expect($identified['containers'][0]['resource'])->toBe($other->uuid);
 });
