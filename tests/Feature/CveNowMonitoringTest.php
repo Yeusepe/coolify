@@ -13,6 +13,7 @@ use App\Models\Team;
 use App\Models\User;
 use App\Notifications\Server\VulnerabilitiesFound;
 use App\Services\CveNowService;
+use App\Services\SoftwareRecommendationService;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
@@ -136,4 +137,23 @@ it('maps container versions to owned applications and service names without disc
     expect($identified['packages'][0]['container'])->toBe('Creator Payments');
     expect($identified['runtimes'][0]['container'])->toBe('Payments infrastructure / redis');
     expect($identified['containers'][0]['resource'])->toBe($other->uuid);
+});
+
+it('renders detected software and security recommendations with escaped resource names', function () {
+    Storage::fake('local');
+    $server = cveMonitoringServer();
+    Http::preventStrayRequests();
+    Http::fake(['api.github.com/repos/nodejs/node/releases*' => Http::response([['tag_name' => 'v24.22.1']])]);
+    $resource = '<script>private-app()</script>';
+    $inventory = ['runtimes' => [['name' => 'node', 'version' => '24.22.0', 'container' => $resource]], 'containers' => [['name' => 'container-id', 'resource' => $resource, 'image' => 'app:deployed']], 'host' => ['os' => 'Ubuntu 24.04', 'kernel' => '6.8.0']];
+    $finding = ['id' => 'CVE-2026-12345', 'package' => 'example', 'ecosystem' => 'npm', 'version' => '1.0.0', 'fixed' => ['1.0.1'], 'contexts' => [$resource], 'score' => 7.5, 'kind' => 'Package version match', 'url' => 'https://cve.now/CVE-2026-12345'];
+    $recommendations = app(SoftwareRecommendationService::class)->recommend($inventory, [$finding]);
+    app(CveNowService::class)->saveReport($server, [...$recommendations, 'checked_at' => now()->toIso8601String(), 'packages_checked' => 1, 'containers' => $inventory['containers'], 'runtimes' => $inventory['runtimes'], 'findings' => []]);
+
+    Livewire::test(Vulnerabilities::class, ['server_uuid' => $server->uuid])
+        ->assertSee('Node.js 24.22.0')->assertSee('Vendor target: 24.22.1')
+        ->assertSee('Candidate: 1.0.1')->assertSee('Ubuntu 24.04')
+        ->assertSee('&lt;script&gt;private-app()&lt;/script&gt;', escape: false)
+        ->assertDontSee('<script>private-app()</script>', escape: false);
+    Http::assertSentCount(1);
 });
