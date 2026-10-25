@@ -196,6 +196,8 @@ COPY --chown=www-data:www-data routes ./routes
 COPY --chown=www-data:www-data storage ./storage
 COPY --chown=www-data:www-data templates ./templates
 COPY --chown=www-data:www-data resources/views ./resources/views
+COPY --chown=www-data:www-data resources/scripts ./resources/scripts
+RUN test -s resources/scripts/cve-inventory.py
 COPY --chown=www-data:www-data artisan artisan
 COPY --chown=www-data:www-data openapi.yaml ./openapi.yaml
 COPY --chown=www-data:www-data changelogs/ ./changelogs/
