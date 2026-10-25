@@ -49,10 +49,10 @@ it('matches installed package versions without exporting container settings', fu
     Http::assertSent(fn ($request) => $request->url() === 'https://cve.now/stack?p=npm%3Aexample%401.0.0&format=json');
 });
 
-it('detects database and proxy versions and preserves the actual Bun prerelease', function () {
+it('detects database and proxy versions and preserves the actual Bun prerelease', function (string $minioVersion) {
     $root = sys_get_temp_dir().'/cve-software-'.bin2hex(random_bytes(8));
     mkdir($root, 0700);
-    file_put_contents($root.'/docker', <<<'SH'
+    file_put_contents($root.'/docker', str_replace('MINIO_BUILD_VERSION', $minioVersion, <<<'SH'
 #!/bin/sh
 case "$1 $2 $3 $4" in
   'version --format {{.Server.Version}} ') printf 29.9.2 ;;
@@ -60,10 +60,10 @@ case "$1 $2 $3 $4" in
   'exec container node -e') printf '%s' '{"packages":[],"runtime":{"name":"bun","version":"1.4.4"}}' ;;
   'exec container bun --version') printf '1.4.4-canary.1+b1d468617' ;;
   'exec container sh -c') case "$5" in
-    *CVE_SOFTWARE_*) printf '\nCVE_SOFTWARE_postgresql\npostgres (PostgreSQL) 17.6\nCVE_SOFTWARE_redis\nRedis server v=7.4.8 sha=000\nCVE_SOFTWARE_nginx\nnginx version: nginx/1.31.8\nCVE_SOFTWARE_openssl\nOpenSSL 3.5.6\nCVE_SOFTWARE_minio\nminio version DEVELOPMENT.GOGET\nRuntime: go1.27.3 linux/amd64\nCVE_SOFTWARE_postgrest\nPostgREST 14.18\n' ;;
+    *CVE_SOFTWARE_*) printf '\nCVE_SOFTWARE_postgresql\npostgres (PostgreSQL) 17.6\nCVE_SOFTWARE_redis\nRedis server v=7.4.8 sha=000\nCVE_SOFTWARE_nginx\nnginx version: nginx/1.31.8\nCVE_SOFTWARE_openssl\nOpenSSL 3.5.6\nCVE_SOFTWARE_minio\nminio version MINIO_BUILD_VERSION\nRuntime: go1.27.3 linux/amd64\nCVE_SOFTWARE_postgrest\nPostgREST 14.18\n' ;;
   esac ;;
 esac
-SH);
+SH));
     chmod($root.'/docker', 0700);
     try {
         $process = new Process(['/bin/bash', '-c', app(CveNowService::class)->inventoryCommand()], env: ['PATH' => $root.':'.getenv('PATH')]);
@@ -76,14 +76,14 @@ SH);
         expect($runtimes['redis']['version'])->toBe('7.4.8');
         expect($runtimes['nginx']['version'])->toBe('1.31.8');
         expect($runtimes['openssl']['version'])->toBe('3.5.6');
-        expect($runtimes['minio']['version'])->toBe('DEVELOPMENT.GOGET');
+        expect($runtimes['minio']['version'])->toBe($minioVersion);
         expect($runtimes['go']['version'])->toBe('1.27.3');
         expect($runtimes['postgrest']['version'])->toBe('14.18');
     } finally {
         unlink($root.'/docker');
         rmdir($root);
     }
-});
+})->with(['DEVELOPMENT.GOGET', 'RACCONIFY.20261025']);
 
 it('does not interpret an invalid upstream response as a clean report', function () {
     Http::preventStrayRequests();
