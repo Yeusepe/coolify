@@ -1,0 +1,9 @@
+ARG BASE_IMAGE
+ARG NODE_IMAGE
+FROM ${NODE_IMAGE} AS tools
+FROM ${BASE_IMAGE}
+USER 0
+ARG PROFILE
+COPY --from=tools /usr/local/lib/node_modules/npm /opt/security-npm
+COPY docker/security/vendor-node/dependencies.cjs docker/security/vendor-node/profiles.json /tmp/reviewed-patches/
+RUN node /tmp/reviewed-patches/dependencies.cjs "$PROFILE" && rm -rf /tmp/reviewed-patches /opt/security-npm

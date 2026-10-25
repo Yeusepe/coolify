@@ -2,7 +2,7 @@ name: Security MinIO
 on:
   workflow_dispatch:
   push:
-    branches: [main, security/certificate-trust]
+    branches: [main, security/certificate-trust, security/reviewed-runtime-patches-20261025]
     paths: ['docker/security/minio/**', '.github/workflows/security-minio.yml']
 permissions:
   contents: read
@@ -23,7 +23,7 @@ jobs:
         with:
           context: docker/security/minio
           push: true
-          tags: ghcr.io/yeusepe/coolify:minio-security-20261020
+          tags: ghcr.io/yeusepe/coolify:minio-security-20261025
           labels: |
             org.opencontainers.image.source=https://github.com/Yeusepe/coolify
             org.opencontainers.image.revision=${{ github.sha }}
