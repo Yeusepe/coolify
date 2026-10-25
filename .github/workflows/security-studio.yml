@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main, security/certificate-trust, security/vendor-node-patches, security/node-brotli-20261021, security/legacy-dependencies-20261025]
-    paths: ['.github/workflows/security-studio.yml', 'docker/security/vendor-node/zod-compat.cjs']
+    paths: ['.github/workflows/security-studio.yml', 'docker/security/vendor-node/zod-compat.cjs', 'docker/security/vendor-node/studio-bundle-check.cjs']
 permissions:
   contents: read
   packages: write
@@ -57,10 +57,12 @@ jobs:
           text=text.replace('WORKDIR /app','COPY security-ca.pem /etc/ssl/certs/ca-certificates.crt\nENV NODE_OPTIONS="--use-openssl-ca --max-old-space-size=4096" SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt SSL_CERT_DIR=/run/empty-ca-directory NEXT_TELEMETRY_DISABLED=1\nWORKDIR /app',1)
           text=text.replace('COPY ./patches/ ./patches', 'COPY ./patches/ ./patches\nCOPY security-zod ./security-zod')
           text=text.replace('FROM base AS production','FROM base AS production\nRUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx',1)
+          text=text.replace('RUN pnpm --filter studio exec next build','COPY studio-bundle-check.cjs /tmp/studio-bundle-check.cjs\nRUN pnpm --filter studio exec next build && node /tmp/studio-bundle-check.cjs apps/studio/.next/server apps/studio/.next/static',1)
           p.write_text(text)
           PY
           cp ../security/docker/security/bun/ca-certificates.crt security-ca.pem
           cp ../security/docker/security/bun/brotli-regression.cjs brotli-regression.cjs
+          cp ../security/docker/security/vendor-node/studio-bundle-check.cjs studio-bundle-check.cjs
           npm install -g "$(node -p 'require("./package.json").packageManager')"
           mkdir -p security-zod
           npm pack zod@4.6.7 --pack-destination /tmp --ignore-scripts >/dev/null
