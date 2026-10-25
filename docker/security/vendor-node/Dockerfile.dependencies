@@ -1,0 +1,6 @@
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+USER 0
+ARG PROFILE
+COPY docker/security/vendor-node/dependencies.cjs docker/security/vendor-node/profiles.json /tmp/reviewed-patches/
+RUN node /tmp/reviewed-patches/dependencies.cjs "$PROFILE" && rm -rf /tmp/reviewed-patches
