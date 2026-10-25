@@ -185,4 +185,5 @@ it('keeps software recommendations visible when vulnerability lookup is unavaila
     Notification::assertNothingSent();
     Http::assertSentCount(4);
     Sleep::assertSleptTimes(2);
+    Sleep::fake(false);
 })->with(['previous report' => true, 'first scan' => false]);
