@@ -19,7 +19,7 @@ module.exports = function preserveZod3(root) {
     const invalid = extension === 'cjs' ? 'parseUtil_js_1.INVALID' : 'INVALID';
     for (const [name, next] of [['ZodArray', 'ZodObject'], ['ZodSet', 'ZodFunction']]) {
       const start = text.indexOf('class ' + name + ' extends');
-      const end = text.indexOf('class ' + next + ' extends', start);
+      const end = name === 'ZodSet' ? text.indexOf('const valueType = this._def.valueType;', start) : text.indexOf('if (ctx.common.async)', start);
       if (start < 0 || end < 0) throw new Error('Unexpected Zod 3 structure');
       let block = text.slice(start, end);
       const expected = name === 'ZodArray' ? 3 : 2;
