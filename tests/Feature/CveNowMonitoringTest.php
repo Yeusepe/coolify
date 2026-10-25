@@ -2,12 +2,18 @@
 
 use App\Jobs\ServerVulnerabilityCheckJob;
 use App\Livewire\Server\Security\Vulnerabilities;
+use App\Models\Application;
+use App\Models\Environment;
 use App\Models\InstanceSettings;
+use App\Models\Project;
 use App\Models\Server;
+use App\Models\Service;
+use App\Models\StandaloneDocker;
 use App\Models\Team;
 use App\Models\User;
 use App\Notifications\Server\VulnerabilitiesFound;
 use App\Services\CveNowService;
+use App\Services\SoftwareRecommendationService;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
@@ -103,6 +109,7 @@ it('keeps uncertain runtime advisories visible without urgent notifications', fu
     Http::fake([
         'cve.now/feed*' => Http::response(['items' => [['id' => 'CVE-2026-12345']]]),
         'cve.now/api/v1/entries/CVE-2026-12345' => Http::response(['id' => 'CVE-2026-12345', 'title' => 'Review needed', 'severity' => ['cvss' => 9.8], 'affected' => [['product' => 'PHP', 'ranges' => []]]]),
+        'www.php.net/releases/*' => Http::response(['version' => '8.4.27']),
     ]);
     $service = $this->partialMock(CveNowService::class, fn ($mock) => $mock->shouldReceive('collect')->andReturn(['packages' => [], 'runtimes' => [['name' => 'php', 'version' => '8.4.27', 'container' => 'control']], 'containers' => [], 'warnings' => []]));
 
@@ -111,4 +118,42 @@ it('keeps uncertain runtime advisories visible without urgent notifications', fu
     expect($service->report($server)['findings'])->toHaveCount(1)
         ->and($service->report($server)['notified'])->toBe([]);
     Notification::assertNothingSent();
+});
+
+it('maps container versions to owned applications and service names without disclosing another team', function () {
+    $server = cveMonitoringServer();
+    $project = Project::factory()->create(['team_id' => $server->team_id]);
+    $environment = Environment::factory()->create(['project_id' => $project->id]);
+    $destination = $server->standaloneDockers()->firstOrFail();
+    $application = Application::factory()->create(['name' => 'Creator Payments', 'environment_id' => $environment->id, 'destination_id' => $destination->id, 'destination_type' => StandaloneDocker::class]);
+    $service = Service::factory()->create(['name' => 'Payments infrastructure', 'environment_id' => $environment->id, 'server_id' => $server->id]);
+    $otherProject = Project::factory()->create(['team_id' => Team::factory()->create()->id]);
+    $otherEnvironment = Environment::factory()->create(['project_id' => $otherProject->id]);
+    $other = Application::factory()->create(['name' => 'Other team private app', 'environment_id' => $otherEnvironment->id, 'destination_id' => $destination->id, 'destination_type' => StandaloneDocker::class]);
+    $inventory = ['packages' => [['name' => 'next', 'version' => '16.4.2', 'ecosystem' => 'npm', 'container' => $application->uuid.'-20261025']], 'runtimes' => [['name' => 'redis', 'version' => '7.4.8', 'container' => 'redis-'.$service->uuid]], 'containers' => [['name' => $other->uuid, 'image' => 'private-image']]];
+
+    $identified = app(CveNowService::class)->identifyResources($server, $inventory);
+
+    expect($identified['packages'][0]['container'])->toBe('Creator Payments');
+    expect($identified['runtimes'][0]['container'])->toBe('Payments infrastructure / redis');
+    expect($identified['containers'][0]['resource'])->toBe($other->uuid);
+});
+
+it('renders detected software and security recommendations with escaped resource names', function () {
+    Storage::fake('local');
+    $server = cveMonitoringServer();
+    Http::preventStrayRequests();
+    Http::fake(['api.github.com/repos/nodejs/node/releases*' => Http::response([['tag_name' => 'v24.22.1']])]);
+    $resource = '<script>private-app()</script>';
+    $inventory = ['runtimes' => [['name' => 'node', 'version' => '24.22.0', 'container' => $resource]], 'containers' => [['name' => 'container-id', 'resource' => $resource, 'image' => 'app:deployed']], 'host' => ['os' => 'Ubuntu 24.04', 'kernel' => '6.8.0']];
+    $finding = ['id' => 'CVE-2026-12345', 'package' => 'example', 'ecosystem' => 'npm', 'version' => '1.0.0', 'fixed' => ['1.0.1'], 'contexts' => [$resource], 'score' => 7.5, 'kind' => 'Package version match', 'url' => 'https://cve.now/CVE-2026-12345'];
+    $recommendations = app(SoftwareRecommendationService::class)->recommend($inventory, [$finding]);
+    app(CveNowService::class)->saveReport($server, [...$recommendations, 'checked_at' => now()->toIso8601String(), 'packages_checked' => 1, 'containers' => $inventory['containers'], 'runtimes' => $inventory['runtimes'], 'findings' => []]);
+
+    Livewire::test(Vulnerabilities::class, ['server_uuid' => $server->uuid])
+        ->assertSee('Node.js 24.22.0')->assertSee('Vendor target: 24.22.1')
+        ->assertSee('Candidate: 1.0.1')->assertSee('Ubuntu 24.04')
+        ->assertSee('&lt;script&gt;private-app()&lt;/script&gt;', escape: false)
+        ->assertDontSee('<script>private-app()</script>', escape: false);
+    Http::assertSentCount(1);
 });

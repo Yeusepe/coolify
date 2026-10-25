@@ -23,7 +23,48 @@ class CveNowService
             throw new RuntimeException('The software inventory is incomplete.');
         }
 
-        return $data;
+        return $this->identifyResources($server, $data);
+    }
+
+    public function identifyResources(Server $server, array $inventory): array
+    {
+        $resources = [];
+        foreach ($server->applications()->loadMissing('environment.project') as $application) {
+            if ($application->environment?->project?->team_id === $server->team_id) {
+                $resources[$application->uuid] = ['name' => $application->name, 'type' => 'application'];
+            }
+        }
+        foreach ($server->services()->whereHas('environment.project', fn ($q) => $q->whereTeamId($server->team_id))->get() as $service) {
+            $resources[$service->uuid] = ['name' => $service->name, 'type' => 'service'];
+        }
+        foreach ($server->databases() as $database) {
+            $database->loadMissing('environment.project');
+            if ($database->environment?->project?->team_id === $server->team_id) {
+                $resources[$database->uuid] = ['name' => $database->name, 'type' => 'database'];
+            }
+        }
+        $label = function (string $container) use ($resources): string {
+            foreach ($resources as $uuid => $resource) {
+                if ($container === $uuid || str_starts_with($container, $uuid.'-')) {
+                    return mb_substr($resource['name'], 0, 160);
+                }
+                if (str_ends_with($container, '-'.$uuid)) {
+                    return mb_substr($resource['name'].($resource['type'] === 'service' ? ' / '.substr($container, 0, -strlen($uuid) - 1) : ''), 0, 160);
+                }
+            }
+
+            return ['coolify' => 'racconify', 'coolify-db' => 'racconify / PostgreSQL', 'coolify-redis' => 'racconify / Redis', 'coolify-proxy' => 'Managed proxy', 'coolify-sentinel' => 'Server monitoring'][$container] ?? $container;
+        };
+        foreach (['packages', 'runtimes'] as $kind) {
+            foreach ($inventory[$kind] ?? [] as $index => $record) {
+                $inventory[$kind][$index]['container'] = $label($record['container']);
+            }
+        }
+        foreach ($inventory['containers'] as $index => $container) {
+            $inventory['containers'][$index]['resource'] = $label($container['name']);
+        }
+
+        return $inventory;
     }
 
     public function inventoryCommand(): string
@@ -67,7 +108,7 @@ class CveNowService
             }
         }
 
-        $technologyNames = ['php' => ['php'], 'node' => ['node', 'node.js', 'nodejs'], 'docker' => ['docker', 'docker engine', 'docker_engine', 'docker-ce', 'moby']];
+        $technologyNames = ['php' => ['php'], 'node' => ['node', 'node.js', 'nodejs'], 'docker' => ['docker', 'docker engine', 'docker_engine', 'docker-ce', 'moby'], 'postgresql' => ['postgresql', 'postgres'], 'redis' => ['redis', 'redis server'], 'nginx' => ['nginx'], 'openssl' => ['openssl']];
         foreach ($technologyNames as $technology => $products) {
             $runtimes = array_values(array_filter($inventory['runtimes'] ?? [], fn ($r) => $r['name'] === $technology));
             if (! $runtimes) {
