@@ -26,7 +26,11 @@ for (const t of targets) {
   if (!aliases[key]) { const alias = 'patch-' + Object.keys(aliases).length; aliases[key] = alias; dependencies[alias] = 'npm:' + key; }
 }
 fs.mkdirSync('/tmp/runtime-security', {recursive:true});
-fs.writeFileSync('/tmp/runtime-security/package.json', JSON.stringify({name:'runtime-security',private:true,dependencies}));
+const overrides = {};
+for (const [name, versions] of Object.entries(profile.packages)) {
+  for (const [major, version] of Object.entries(versions)) overrides[name + '@^' + major] = version;
+}
+fs.writeFileSync('/tmp/runtime-security/package.json', JSON.stringify({name:'runtime-security',private:true,dependencies,overrides}));
 cp.execFileSync(process.execPath, ['/opt/security-npm/bin/npm-cli.js','install','--prefix','/tmp/runtime-security','--install-strategy=nested','--omit=dev','--ignore-scripts','--no-audit','--no-fund'], {stdio:'inherit'});
 for (const t of targets) {
   const source = '/tmp/runtime-security/node_modules/' + aliases[t.name + '@' + t.version];

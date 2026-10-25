@@ -2,7 +2,7 @@ name: Security vendor Node libraries
 on:
   workflow_dispatch:
   push:
-    branches: [main, security/vendor-node-patches, security/node-brotli-20261021, security/reviewed-runtime-patches-20261025]
+    branches: [main, security/vendor-node-patches, security/node-brotli-20261021, security/reviewed-runtime-patches-20261025, security/nested-runtime-copies]
     paths: ['docker/security/vendor-node/**', '.github/workflows/security-vendor-node.yml', 'docker/security/bun/brotli-regression.cjs']
 permissions:
   contents: read
@@ -34,7 +34,7 @@ jobs:
           context: .
           file: docker/security/vendor-node/Dockerfile.dependencies
           push: true
-          tags: ghcr.io/yeusepe/coolify:security-${{ matrix.name }}-reviewed-20261025
+          tags: ghcr.io/yeusepe/coolify:security-${{ matrix.name }}-nested-20261025
           build-args: |
             BASE_IMAGE=${{ matrix.base }}
             PROFILE=${{ matrix.name }}
