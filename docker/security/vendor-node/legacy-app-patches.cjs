@@ -33,8 +33,8 @@ for (const root of cores) {
     let text = fs.readFileSync(file, 'utf8');
     const marker = 'const headerValue = getter.get(carrier, constants_1.BAGGAGE_HEADER);';
     const esmMarker = 'const headerValue = getter.get(carrier, BAGGAGE_HEADER);';
-    const found = text.includes(marker) ? marker : esmMarker;
-    assert(text.includes(found), 'Unknown baggage propagator');
+    const found = [marker, esmMarker, esmMarker.replace('const ', 'var ')].find(value => text.includes(value));
+    assert(found, 'Unknown baggage propagator');
     text = text.replace(found, found + `
         // Backport the W3C inbound bounds without changing the vendor's core major.
         const values = Array.isArray(headerValue) ? headerValue : [headerValue];

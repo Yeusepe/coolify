@@ -10,8 +10,9 @@ function walk(path) {
   const manifest = resolved + '/package.json';
   if (fs.existsSync(manifest)) {
     const p = JSON.parse(fs.readFileSync(manifest));
-    const version = profile.packages[p.name]?.[p.version.split('.')[0]];
-    if (version && p.version !== version) targets.push({name:p.name, version, target:resolved, legacyZod:p.name === 'zod' && p.version.startsWith('3.')});
+    const major = typeof p.version === 'string' ? p.version.split('.')[0] : (p.name === 'zod' ? '3' : null);
+    const version = profile.packages[p.name]?.[major];
+    if (version && p.version !== version) targets.push({name:p.name, version, target:resolved, legacyZod:p.name === 'zod' && major === '3'});
   }
   for (const entry of fs.readdirSync(resolved, {withFileTypes:true})) {
     if ((entry.isDirectory() || entry.isSymbolicLink()) && entry.name !== '.bin') walk(resolved + '/' + entry.name);
