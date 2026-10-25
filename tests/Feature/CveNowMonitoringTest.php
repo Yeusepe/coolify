@@ -20,8 +20,8 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
-use Illuminate\Support\Facades\Sleep;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Sleep;
 use Livewire\Livewire;
 
 uses(RefreshDatabase::class);
@@ -184,4 +184,5 @@ it('keeps software recommendations visible when vulnerability lookup is unavaila
     Livewire::test(Vulnerabilities::class, ['server_uuid' => $server->uuid])->assertSee('Vendor target: 24.22.1')->assertSee('Software inventory checked');
     Notification::assertNothingSent();
     Http::assertSentCount(4);
+    Sleep::assertSleptTimes(2);
 })->with(['previous report' => true, 'first scan' => false]);
