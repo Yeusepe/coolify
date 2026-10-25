@@ -5,5 +5,7 @@ FROM ${BASE_IMAGE}
 USER 0
 ARG PROFILE
 COPY --from=tools /usr/local/lib/node_modules/npm /opt/security-npm
-COPY docker/security/vendor-node/dependencies.cjs docker/security/vendor-node/profiles.json /tmp/reviewed-patches/
-RUN node /tmp/reviewed-patches/dependencies.cjs "$PROFILE" && rm -rf /tmp/reviewed-patches /opt/security-npm
+COPY docker/security/vendor-node/dependencies.cjs docker/security/vendor-node/profiles.json docker/security/vendor-node/zod-compat.cjs /tmp/reviewed-patches/
+RUN node /tmp/reviewed-patches/dependencies.cjs "$PROFILE"
+COPY docker/security/vendor-node/legacy-app-patches.cjs /tmp/reviewed-patches/legacy-app-patches.cjs
+RUN node /tmp/reviewed-patches/legacy-app-patches.cjs "$PROFILE" && rm -rf /tmp/reviewed-patches /opt/security-npm

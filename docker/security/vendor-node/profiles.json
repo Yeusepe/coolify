@@ -17,6 +17,27 @@
       },
       "@opentelemetry/instrumentation-tedious": {
         "0": "0.40.0"
+      },
+      "fastify": {
+        "4": "5.12.7"
+      },
+      "@fastify/cors": {
+        "9": "11.3.1"
+      },
+      "@fastify/swagger": {
+        "8": "9.9.2"
+      },
+      "@fastify/type-provider-typebox": {
+        "3": "5.2.0"
+      },
+      "fastify-metrics": {
+        "10": "12.1.0"
+      },
+      "@opentelemetry/instrumentation-mongoose": {
+        "0": "0.67.0"
+      },
+      "@opentelemetry/instrumentation-pg": {
+        "0": "0.73.0"
       }
     }
   },
@@ -53,6 +74,37 @@
       },
       "@opentelemetry/instrumentation-oracledb": {
         "0": "0.46.0"
+      }
+    }
+  },
+  "studio": {
+    "root": "/app/node_modules",
+    "packages": {
+      "zod": {
+        "3": "4.6.7"
+      }
+    }
+  },
+  "mongosh": {
+    "root": "/usr/local/lib/node_modules/mongosh/node_modules",
+    "packages": {
+      "basic-ftp": {
+        "5": "6.2.3"
+      },
+      "brace-expansion": {
+        "2": "2.1.7"
+      },
+      "ip-address": {
+        "10": "10.7.4"
+      },
+      "fast-xml-parser": {
+        "5": "5.11.2"
+      },
+      "qs": {
+        "6": "6.16.1"
+      },
+      "zod": {
+        "3": "4.6.7"
       }
     }
   }

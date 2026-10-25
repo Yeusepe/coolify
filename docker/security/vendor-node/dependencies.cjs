@@ -11,7 +11,7 @@ function walk(path) {
   if (fs.existsSync(manifest)) {
     const p = JSON.parse(fs.readFileSync(manifest));
     const version = profile.packages[p.name]?.[p.version.split('.')[0]];
-    if (version && p.version !== version) targets.push({name:p.name, version, target:resolved});
+    if (version && p.version !== version) targets.push({name:p.name, version, target:resolved, legacyZod:p.name === 'zod' && p.version.startsWith('3.')});
   }
   for (const entry of fs.readdirSync(resolved, {withFileTypes:true})) {
     if ((entry.isDirectory() || entry.isSymbolicLink()) && entry.name !== '.bin') walk(resolved + '/' + entry.name);
@@ -37,6 +37,7 @@ for (const t of targets) {
   const p = JSON.parse(fs.readFileSync(source + '/package.json'));
   if (p.name !== t.name || p.version !== t.version) throw new Error('Unexpected package');
   fs.rmSync(t.target, {recursive:true}); fs.cpSync(source, t.target, {recursive:true});
+  if (t.legacyZod) require('./zod-compat.cjs')(t.target);
 }
 fs.mkdirSync('/usr/share/racconify', {recursive:true});
 fs.copyFileSync('/tmp/runtime-security/package-lock.json','/usr/share/racconify/' + process.argv[2] + '-reviewed-package-lock.json');
