@@ -93,6 +93,8 @@ jobs:
           tests/Feature/ServerProxyConfigurationAuthorizationTest.php
           tests/Feature/SshMultiplexingLockTest.php
           tests/Feature/ServerSettingsAuditTest.php
+          tests/Feature/CveNowServiceTest.php
+          tests/Feature/CveNowMonitoringTest.php
       - run: php artisan view:cache
       - run: php artisan view:clear
 
