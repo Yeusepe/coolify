@@ -22,7 +22,7 @@
                     <x-application.settings-section title="Detected software and update recommendations" helper="Vendor releases are checked for the installed release line. Recommendations never change software automatically.">
                         @if (!empty($report['host']))<p class="mb-3 text-xs text-neutral-600 dark:text-fg-dim">{{ $report['host']['os'] ?? '' }} · Kernel {{ $report['host']['kernel'] ?? '' }}</p>@endif
                         @forelse ($report['software'] as $software)
-                            <details class="border-b border-neutral-200 py-3 dark:border-white/[0.08]" wire:key="software-{{ hash('sha256', $software['technology'].$software['version'].($software['revision'] ?? '')) }}">
+                            <details wire:ignore.self class="border-b border-neutral-200 py-3 dark:border-white/[0.08]" wire:key="software-{{ hash('sha256', $software['technology'].$software['version'].($software['revision'] ?? '')) }}">
                                 <summary class="cursor-pointer text-sm"><span class="font-medium">{{ $software['name'] }} {{ $software['version'] }}</span> · {{ $software['status'] }}{{ $software['target'] ? '. Vendor target: '.$software['target'] : '' }}</summary>
                                 <p class="mt-2 break-words text-xs">{{ implode(', ', $software['contexts']) }}</p>
                                 @if ($software['revision'] ?? null)<p class="mt-2 break-words font-mono text-xs">Build {{ $software['revision'] }}</p>@endif
@@ -35,7 +35,7 @@
                     </x-application.settings-section>
                     <x-application.settings-section title="Security dependency update plan" helper="Advisory fix versions grouped by affected application. Confirm vendor applicability before upgrading.">
                         @forelse ($report['package_updates'] ?? [] as $update)
-                            <details class="border-b border-neutral-200 py-3 dark:border-white/[0.08]" wire:key="package-update-{{ hash('sha256', $update['ecosystem'].$update['package'].$update['version']) }}">
+                            <details wire:ignore.self class="border-b border-neutral-200 py-3 dark:border-white/[0.08]" wire:key="package-update-{{ hash('sha256', $update['ecosystem'].$update['package'].$update['version']) }}">
                                 <summary class="cursor-pointer text-sm"><span class="font-medium">{{ $update['package'] }} {{ $update['version'] }}</span> · {{ $update['status'] }}{{ $update['target'] ? '. Candidate: '.$update['target'] : '. No verified target.' }}</summary>
                                 <p class="mt-2 break-words text-xs">{{ implode(', ', $update['contexts']) }}</p>
                                 <p class="mt-2 text-xs text-neutral-600 dark:text-fg-dim">{{ $update['recommendation'] }}</p>
@@ -47,7 +47,7 @@
                     </x-application.settings-section>
                     <x-application.settings-section title="Running applications and infrastructure" helper="Resources mapped to their racconify names. Detected packages may include optional or build-time dependencies.">
                         @foreach ($report['resources'] ?? [] as $resource)
-                            <details class="border-b border-neutral-200 py-3 dark:border-white/[0.08]" wire:key="running-resource-{{ hash('sha256', $resource['name']) }}">
+                            <details wire:ignore.self class="border-b border-neutral-200 py-3 dark:border-white/[0.08]" wire:key="running-resource-{{ hash('sha256', $resource['name']) }}">
                                 <summary class="cursor-pointer text-sm font-medium">{{ $resource['resource'] ?? $resource['name'] }}</summary>
                                 <p class="mt-2 break-words text-xs">{{ $resource['software'] ? implode(', ', $resource['software']) : 'No supported software version detector matched this image. Manual vendor review is required.' }}</p>
                                 <p class="mt-2 break-words font-mono text-xs text-neutral-600 dark:text-fg-dim">Image: {{ $resource['image'] }}</p>
