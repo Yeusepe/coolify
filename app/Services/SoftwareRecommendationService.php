@@ -68,7 +68,7 @@ class SoftwareRecommendationService
                 try {
                     [$versions, $url] = $this->releases($product[1], $runtime['version']);
                     $row['url'] = $url;
-                    if (! preg_match('/^(?:v?\d+\.\d+(?:\.\d+){0,2}(?:[-+][A-Za-z0-9._-]+)?|RELEASE\.\d{4}-\d\d-\d\dT\d\d-\d\d-\d\dZ)$/', $runtime['version'])) {
+                    if (! preg_match('/^(?:v?\d+\.\d+(?:\.\d+){0,2}(?:[-+][A-Za-z0-9._-]+)?|RELEASE\.\d{4}-\d\d-\d\dT\d\d-\d\d-\d\dZ)$/', preg_replace('/\+.*/', '', $runtime['version']))) {
                         $row['status'] = 'Build identity requires review';
                         $row['recommendation'] = 'This binary does not report a comparable release version. Verify its pinned build provenance and security patches before replacing it. Do not assume a vendor image is a safe replacement.';
                         $software[] = $row;
