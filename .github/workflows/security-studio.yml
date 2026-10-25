@@ -36,6 +36,7 @@ jobs:
               assert count==1,(name,count)
           text,count=re.subn(r'(?m)^overrides:\s*$', "overrides:\n  'zod@^3': file:./security-zod\n  simple-git: 4.0.1\n  '@simple-git/argv-parser': 2.0.1\n  'picomatch@^2': 2.3.2\n  'picomatch@^4': 4.0.4", text, count=1)
           assert count==1
+          text=text.replace('minimumReleaseAgeExclude:', "minimumReleaseAgeExclude:\n  - 'next@16.4.3'\n  - '@next/*@16.4.3'")
           text=text.replace('express-rate-limit>ip-address: ^10.1.1','express-rate-limit>ip-address: 10.7.4')
           p.write_text(text)
           p=Path('apps/studio/Dockerfile')
