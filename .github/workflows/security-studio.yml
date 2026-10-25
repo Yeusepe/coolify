@@ -71,7 +71,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import re
-          entries=set(re.findall(r'^  (zod@[^:]+):',Path('pnpm-lock.yaml').read_text(),re.M))
+          entries=set(re.findall(r'^  (zod@\d[^:]*):\s*$',Path('pnpm-lock.yaml').read_text(),re.M))
           assert entries <= {'zod@4.6.7'},entries
           assert 'zod@file:security-zod:' in Path('pnpm-lock.yaml').read_text()
           PY
