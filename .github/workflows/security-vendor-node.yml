@@ -38,6 +38,7 @@ jobs:
           build-args: |
             BASE_IMAGE=${{ matrix.base }}
             PROFILE=${{ matrix.name }}
+            NODE_IMAGE=${{ matrix.node }}
           labels: |
             org.opencontainers.image.source=https://github.com/Yeusepe/coolify
             org.opencontainers.image.revision=${{ github.sha }}

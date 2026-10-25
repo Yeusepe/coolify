@@ -27,7 +27,7 @@ for (const t of targets) {
 }
 fs.mkdirSync('/tmp/runtime-security', {recursive:true});
 fs.writeFileSync('/tmp/runtime-security/package.json', JSON.stringify({name:'runtime-security',private:true,dependencies}));
-cp.execFileSync('npm', ['install','--prefix','/tmp/runtime-security','--install-strategy=nested','--omit=dev','--ignore-scripts','--no-audit','--no-fund'], {stdio:'inherit'});
+cp.execFileSync(process.execPath, ['/opt/security-npm/bin/npm-cli.js','install','--prefix','/tmp/runtime-security','--install-strategy=nested','--omit=dev','--ignore-scripts','--no-audit','--no-fund'], {stdio:'inherit'});
 for (const t of targets) {
   const source = '/tmp/runtime-security/node_modules/' + aliases[t.name + '@' + t.version];
   const p = JSON.parse(fs.readFileSync(source + '/package.json'));
