@@ -1,0 +1,30 @@
+name: Security SeaweedFS
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, security/legacy-dependencies-20261025]
+    paths: ['docker/security/seaweed/**', '.github/workflows/security-seaweed.yml']
+permissions:
+  contents: read
+  packages: write
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: .
+          file: docker/security/seaweed/Dockerfile
+          push: true
+          tags: ghcr.io/yeusepe/coolify:seaweed-security-20261025
+          labels: |
+            org.opencontainers.image.source=https://github.com/Yeusepe/coolify
+            org.opencontainers.image.revision=${{ github.sha }}

@@ -4,14 +4,15 @@ const profile = require('./profiles.json')[process.argv[2]];
 if (!profile) throw new Error('Unknown security profile');
 const targets = [], seen = new Set();
 function walk(path) {
-  const resolved = fs.realpathSync(path);
+  let resolved; try { resolved = fs.realpathSync(path); } catch (error) { if (error.code === 'ENOENT') return; throw error; }
   if (!resolved.startsWith(profile.root + '/') || seen.has(resolved)) return;
   seen.add(resolved);
   const manifest = resolved + '/package.json';
   if (fs.existsSync(manifest)) {
     const p = JSON.parse(fs.readFileSync(manifest));
-    const version = profile.packages[p.name]?.[p.version.split('.')[0]];
-    if (version && p.version !== version) targets.push({name:p.name, version, target:resolved});
+    const major = typeof p.version === 'string' ? p.version.split('.')[0] : (p.name === 'zod' ? '3' : null);
+    const version = profile.packages[p.name]?.[major];
+    if (version && p.version !== version) targets.push({name:p.name, version, target:resolved, legacyZod:p.name === 'zod' && major === '3'});
   }
   for (const entry of fs.readdirSync(resolved, {withFileTypes:true})) {
     if ((entry.isDirectory() || entry.isSymbolicLink()) && entry.name !== '.bin') walk(resolved + '/' + entry.name);
@@ -37,6 +38,7 @@ for (const t of targets) {
   const p = JSON.parse(fs.readFileSync(source + '/package.json'));
   if (p.name !== t.name || p.version !== t.version) throw new Error('Unexpected package');
   fs.rmSync(t.target, {recursive:true}); fs.cpSync(source, t.target, {recursive:true});
+  if (t.legacyZod) require('./zod-compat.cjs')(t.target);
 }
 fs.mkdirSync('/usr/share/racconify', {recursive:true});
 fs.copyFileSync('/tmp/runtime-security/package-lock.json','/usr/share/racconify/' + process.argv[2] + '-reviewed-package-lock.json');
