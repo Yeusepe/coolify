@@ -14,13 +14,13 @@ if (profile === 'meta') {
 }
 const seen = new Set(), cores = [], zods = [];
 function walk(root) {
-  const real = fs.realpathSync(root);
+  let real; try { real = fs.realpathSync(root); } catch (error) { if (error.code === 'ENOENT') return; throw error; }
   if (seen.has(real) || !real.startsWith(config.root)) return;
   seen.add(real);
   const file = path.join(real, 'package.json');
   if (fs.existsSync(file)) {
     const p = JSON.parse(fs.readFileSync(file));
-    if (p.name === '@opentelemetry/core' && p.version.startsWith('1.')) cores.push(real);
+    if (p.name === '@opentelemetry/core' && typeof p.version === 'string' && p.version.startsWith('1.')) cores.push(real);
     if (p.name === 'zod' && p.racconify) zods.push(real);
   }
   for (const e of fs.readdirSync(real, {withFileTypes:true})) if ((e.isDirectory() || e.isSymbolicLink()) && e.name !== '.bin') walk(path.join(real,e.name));

@@ -4,7 +4,7 @@ const profile = require('./profiles.json')[process.argv[2]];
 if (!profile) throw new Error('Unknown security profile');
 const targets = [], seen = new Set();
 function walk(path) {
-  const resolved = fs.realpathSync(path);
+  let resolved; try { resolved = fs.realpathSync(path); } catch (error) { if (error.code === 'ENOENT') return; throw error; }
   if (!resolved.startsWith(profile.root + '/') || seen.has(resolved)) return;
   seen.add(resolved);
   const manifest = resolved + '/package.json';
