@@ -154,24 +154,63 @@ class CveNowService
             return null;
         }
         $version = ltrim($version, 'v');
+        $unknown = false;
         foreach ($ranges as $range) {
             if (! array_intersect(['introduced', 'fixed', 'limit', 'lastAffected', 'last_affected'], array_keys($range))) {
-                return null;
+                $unknown = true;
+
+                continue;
             }
             $start = ltrim($range['introduced'] ?? '0', 'v');
             $fixed = $range['fixed'] ?? $range['limit'] ?? null;
             $last = $range['lastAffected'] ?? $range['last_affected'] ?? null;
+            $branchEnd = null;
+            $uncertainFix = false;
+            if ($start === '*') {
+                $start = '0';
+            } elseif ($wildcard = $this->wildcardBounds($start)) {
+                [$start, $branchEnd] = $wildcard;
+            }
+            if ($fixed && ($wildcard = $this->wildcardBounds($fixed))) {
+                $fixed = $wildcard[1];
+                $uncertainFix = true;
+            }
+            if ($last && ($wildcard = $this->wildcardBounds($last))) {
+                $branchEnd = $wildcard[1];
+                $last = null;
+            }
+            $invalid = false;
             foreach (array_filter([$start === '0' ? null : $start, $fixed, $last]) as $boundary) {
                 if (! preg_match('/^v?\d+(?:\.\d+){1,3}(?:[-+][A-Za-z0-9.-]+)?$/', $boundary)) {
-                    return null;
+                    $invalid = true;
                 }
             }
-            if (($start === '0' || version_compare($version, $start, '>=')) && (! $fixed || version_compare($version, ltrim($fixed, 'v'), '<')) && (! $last || version_compare($version, ltrim($last, 'v'), '<='))) {
-                return true;
+            if ($invalid) {
+                $unknown = true;
+
+                continue;
+            }
+            if (($start === '0' || version_compare($version, $start, '>=')) && (! $branchEnd || version_compare($version, $branchEnd, '<')) && (! $fixed || version_compare($version, ltrim($fixed, 'v'), '<')) && (! $last || version_compare($version, ltrim($last, 'v'), '<='))) {
+                if (! $uncertainFix) {
+                    return true;
+                }
+                $unknown = true;
             }
         }
 
-        return false;
+        return $unknown ? null : false;
+    }
+
+    private function wildcardBounds(string $version): ?array
+    {
+        if (! preg_match('/^v?(\d+(?:\.\d+){0,2})\.(?:\*|x)$/i', $version, $matches)) {
+            return null;
+        }
+        $parts = array_map('intval', explode('.', $matches[1]));
+        $upper = $parts;
+        $upper[count($upper) - 1]++;
+
+        return [implode('.', array_pad($parts, 3, 0)), implode('.', array_pad($upper, 3, 0))];
     }
 
     private function finding(array $entry, array $package, array $contexts, string $kind): array
@@ -245,13 +284,13 @@ class CveNowService
 
     public function saveReport(Server $server, array $data): void
     {
-        Storage::disk('local')->put($this->path($server, 'report'), json_encode($data, JSON_THROW_ON_ERROR));
+        Storage::disk('local')->put($this->path($server, 'report'), json_encode($data, JSON_THROW_ON_ERROR), 'private');
     }
 
     public function savePackages(Server $server, string $text): void
     {
         $this->parsePackages($text);
-        Storage::disk('local')->put($this->path($server, 'settings'), json_encode(['packages' => $text], JSON_THROW_ON_ERROR));
+        Storage::disk('local')->put($this->path($server, 'settings'), json_encode(['packages' => $text], JSON_THROW_ON_ERROR), 'private');
     }
 
     public function recordFailure(Server $server): void

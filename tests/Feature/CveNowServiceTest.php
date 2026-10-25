@@ -97,6 +97,18 @@ it('validates additional package names and exact versions', function () {
     expect(fn () => $service->parsePackages('npm:example@https://user:password@internal'))->toThrow(InvalidArgumentException::class);
 });
 
+it('handles wildcard branches used by live runtime advisories', function () {
+    $service = app(CveNowService::class);
+    $phpRanges = [['introduced' => '8.2.*', 'fixed' => '8.2.35'], ['introduced' => '8.3.*', 'fixed' => '8.3.36'], ['introduced' => '8.4.*', 'fixed' => '8.4.27'], ['introduced' => '8.5.*', 'fixed' => '8.5.12']];
+    expect($service->inRanges('8.4.27', $phpRanges))->toBeFalse()
+        ->and($service->inRanges('8.4.26', $phpRanges))->toBeTrue()
+        ->and($service->inRanges('24.22.1', [['introduced' => '*', 'lastAffected' => '21.7.2']]))->toBeFalse()
+        ->and($service->inRanges('24.22.1', [['introduced' => '4.0', 'fixed' => '4.*'], ['introduced' => '24.14.0', 'lastAffected' => '24.14.0']]))->toBeFalse()
+        ->and($service->inRanges('24.14.0', [['introduced' => '4.0', 'fixed' => '4.*'], ['introduced' => '24.14.0', 'lastAffected' => '24.14.0']]))->toBeTrue()
+        ->and($service->inRanges('4.5.0', [['introduced' => '4.0', 'fixed' => '4.*']]))->toBeNull()
+        ->and($service->inRanges('8.5.0', [['introduced' => '8.4.*']]))->toBeFalse();
+});
+
 it('does not follow advisory redirects to internal hosts', function () {
     Http::preventStrayRequests();
     Http::fake([

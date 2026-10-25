@@ -30,7 +30,7 @@ class VulnerabilitiesFound extends CustomEmailNotification
     {
         $ids = array_unique(array_column($this->findings, 'id'));
 
-        return count($this->findings).' new high/critical version matches or runtime advisories require review. '.implode(', ', array_slice($ids, 0, 8)).'. CVE.now matches need deployment and vendor-backport review.';
+        return count($this->findings).' new high/critical version matches require review. '.implode(', ', array_slice($ids, 0, 8)).'. CVE.now matches need deployment and vendor-backport review.';
     }
 
     public function toDiscord(): DiscordMessage

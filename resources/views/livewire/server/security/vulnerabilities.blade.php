@@ -8,7 +8,7 @@
                 <x-slot:actions><x-forms.button wire:click="refreshReport" :disabled="$pending || !$enabled">{{ $pending ? 'Check in progress' : 'Check now' }}</x-forms.button></x-slot:actions>
                 @error('monitoring')<x-callout type="warning" :title="$message" />@enderror
                 @if (!$enabled)<x-callout type="warning" title="Monitoring is disabled for this installation" />@endif
-                <p class="text-sm text-neutral-600 dark:text-fg-dim">Automatic checks run hourly. New high and critical matches use your existing server patch notification channels. Names and versions are sent to CVE.now. Credentials, source code and lockfiles are not uploaded.</p>
+                <p class="text-sm text-neutral-600 dark:text-fg-dim">Automatic checks run hourly. New high and critical version matches use your existing server patch notification channels. Advisories with uncertain version applicability stay on this page without triggering alerts. Names and versions are sent to CVE.now. Credentials, source code and lockfiles are not uploaded.</p>
                 @if ($report['error'] ?? null)<x-callout type="danger" title="Check could not finish">{{ $report['error'] }} Last successful results remain below.</x-callout>@endif
                 @if (isset($report['checked_at']))
                     <p class="mt-3 text-sm text-neutral-600 dark:text-fg-dim">Checked {{ \Illuminate\Support\Carbon::parse($report['checked_at'])->diffForHumans() }}. {{ $report['packages_checked'] }} distinct package versions checked across {{ count($report['containers']) }} containers.</p>
