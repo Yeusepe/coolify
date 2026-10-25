@@ -88,4 +88,8 @@ return [
         'private_key' => env('DOMAIN_CONNECT_PRIVATE_KEY'),
     ],
 
+    'cve_now' => [
+        'enabled' => env('CVE_NOW_ENABLED', false),
+    ],
+
 ];

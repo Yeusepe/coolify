@@ -52,6 +52,7 @@ jobs:
           tests/Feature/RedisUsernameEnvironmentVariableTest.php tests/Feature/StandaloneSqliteTest.php
           tests/Unit/ProductionImageWorkflowTest.php
           tests/Feature/ServerSettingsAuditTest.php
+          tests/Feature/CveNowServiceTest.php
           tests/TestCase.php
           tests/Feature/SshMultiplexingLockTest.php
       - name: Full upstream regression suite
@@ -92,6 +93,8 @@ jobs:
           tests/Feature/ServerProxyConfigurationAuthorizationTest.php
           tests/Feature/SshMultiplexingLockTest.php
           tests/Feature/ServerSettingsAuditTest.php
+          tests/Feature/CveNowServiceTest.php
+          tests/Feature/CveNowMonitoringTest.php
       - run: php artisan view:cache
       - run: php artisan view:clear
 

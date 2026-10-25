@@ -186,6 +186,7 @@
             'visible' => auth()->user()?->can('update', $server),
             'children' => [
                 ['label' => 'Server Patching', 'route' => 'server.security.patches', 'active' => request()->routeIs('server.security.patches'), 'icon' => 'bandage'],
+                ['label' => 'Vulnerabilities', 'route' => 'server.security.vulnerabilities', 'active' => request()->routeIs('server.security.vulnerabilities'), 'icon' => 'shield-alert'],
                 ['label' => 'Terminal Access', 'route' => 'server.security.terminal-access', 'active' => request()->routeIs('server.security.terminal-access'), 'icon' => 'browser-terminal', 'navigate' => false],
             ],
         ],

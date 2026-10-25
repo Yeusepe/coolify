@@ -213,6 +213,10 @@ class ServerManagerJob implements ShouldBeEncrypted, ShouldQueue
             ServerPatchCheckJob::dispatch($server);
         }
 
+        if (config('services.cve_now.enabled') && $server->isFunctional() && shouldRunCronNow(sprintf('%d * * * *', ($server->id * 13) % 60), $serverTimezone, 'cve-now-check:'.$server->id, $this->executionTime)) {
+            ServerVulnerabilityCheckJob::dispatch($server);
+        }
+
         // Crash recovery is handled by sentinelOutOfSync → ServerCheckJob → CheckAndStartSentinelJob.
     }
 

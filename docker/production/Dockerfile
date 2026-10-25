@@ -1,7 +1,7 @@
 # Versions
 # https://hub.docker.com/r/serversideup/php/tags?name=8.4-fpm-nginx-alpine
 # Pinned: v5 moved user bundles to /etc/s6-overlay/user-bundles.d and breaks startup (#12141)
-ARG PHP_BASE_IMAGE=ghcr.io/yeusepe/coolify:php-security-20261020@sha256:6f3ff0098b581e4bd5a4f926051afdece7bc4818425ef17320b6d0ca323d1a4c
+ARG PHP_BASE_IMAGE=ghcr.io/yeusepe/coolify:php-security-20261024@sha256:664b848340ad939fcceb54537db6653a4e2a4772b5eff0d516ee490b83fb7830
 ARG TERMINAL_NODE_IMAGE=node:24.22.1-alpine3.23@sha256:0468540aa58203ff9e40c2aab3907c52644ab818af6176b1c70a026137dc92a2
 # https://github.com/cloudflare/cloudflared/releases
 ARG CLOUDFLARED_VERSION=2026.10.2
@@ -9,7 +9,7 @@ ARG CLOUDFLARED_VERSION=2026.10.2
 # Note: We are using version 18 of the postgres client (while still using postgres 15 for the postgres server) as version 15 has been removed from Alpine 3.23+ https://pkgs.alpinelinux.org/packages?name=postgresql*-client&branch=v3.23&repo=&arch=x86_64&origin=&flagged=&maintainer=
 ARG POSTGRES_VERSION=18
 # https://nginx.org/en/linux_packages.html
-ARG NGINX_VERSION=1.31.2-r1
+ARG NGINX_VERSION=1.31.8-r1
 # uv 0.3.0 source, pinned to avoid intermittent PECL download failures.
 ARG PHP_UV_SOURCE=amphp/ext-uv@1d18f5d1d12e77c24b6b0b9d69194b1051efae66
 
