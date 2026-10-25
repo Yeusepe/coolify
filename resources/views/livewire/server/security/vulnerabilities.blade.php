@@ -9,15 +9,16 @@
                 @error('monitoring')<x-callout type="warning" :title="$message" />@enderror
                 @if (!$enabled)<x-callout type="warning" title="Monitoring is disabled for this installation" />@endif
                 <p class="text-sm text-neutral-600 dark:text-fg-dim">Automatic checks run hourly. New high and critical version matches use your existing server patch notification channels. Advisories with uncertain version applicability stay on this page without triggering alerts. Names and versions are sent to CVE.now. Credentials, source code and lockfiles are not uploaded.</p>
+                @if (isset($report['inventory_checked_at']))<p class="mt-3 text-sm text-neutral-600 dark:text-fg-dim">Software inventory checked {{ \Illuminate\Support\Carbon::parse($report['inventory_checked_at'])->diffForHumans() }}.</p>@endif
                 @if ($report['error'] ?? null)<x-callout type="danger" title="Check could not finish">{{ $report['error'] }} Last successful results remain below.</x-callout>@endif
                 @if (isset($report['checked_at']))
-                    <p class="mt-3 text-sm text-neutral-600 dark:text-fg-dim">Checked {{ \Illuminate\Support\Carbon::parse($report['checked_at'])->diffForHumans() }}. {{ $report['packages_checked'] }} distinct package versions checked across {{ count($report['containers']) }} containers.</p>
+                    <p class="mt-3 text-sm text-neutral-600 dark:text-fg-dim">Last completed vulnerability check {{ \Illuminate\Support\Carbon::parse($report['checked_at'])->diffForHumans() }}. {{ $report['packages_checked'] }} distinct package versions checked across {{ count($report['containers']) }} containers.</p>
                     @if (\Illuminate\Support\Carbon::parse($report['checked_at'])->lt(now()->subHours(3)))<x-callout type="warning" title="These results are stale. Run a new check." />@endif
                 @else
                     <x-empty size="sm" title="No completed check yet" description="Run a check to discover installed packages and review relevant advisories." icon-name="shield-alert" />
                 @endif
             </x-application.settings-section>
-            @if (isset($report['checked_at']))
+            @if (isset($report['checked_at']) || isset($report['software']))
                 @if (isset($report['software']))
                     <x-application.settings-section title="Detected software and update recommendations" helper="Vendor releases are checked for the installed release line. Recommendations never change software automatically.">
                         @if (!empty($report['host']))<p class="mb-3 text-xs text-neutral-600 dark:text-fg-dim">{{ $report['host']['os'] ?? '' }} · Kernel {{ $report['host']['kernel'] ?? '' }}</p>@endif
@@ -55,6 +56,7 @@
                         @endforeach
                     </x-application.settings-section>
                 @endif
+                @if (isset($report['checked_at']))
                 <x-application.settings-section title="Advisory matches" helper="Version matches require deployment and vendor-backport review. No packages are changed automatically.">
                     @forelse (array_slice($report['findings'], ($page - 1) * 25, 25) as $finding)
                         <div class="border-b border-neutral-200 py-4 last:border-0 dark:border-white/[0.08]" wire:key="{{ hash('sha256', $finding['id'].$finding['ecosystem'].$finding['package'].$finding['version']) }}">
@@ -72,9 +74,12 @@
                         <x-forms.button wire:click="$set('page', {{ $page + 1 }})" :disabled="$page >= $pages">Next</x-forms.button>
                     </div>
                 </x-application.settings-section>
+                @if (!isset($report['software']))
                 <x-application.settings-section title="Detected runtimes" helper="Versions read from the running server and containers.">
                     @foreach ($report['runtimes'] as $runtime)<p class="break-words py-1 font-mono text-xs">{{ $runtime['container'] }} · {{ $runtime['name'] }} {{ $runtime['version'] }}</p>@endforeach
                 </x-application.settings-section>
+                @endif
+                @endif
             @endif
             <x-application.settings-section title="Additional technologies" helper="Track exact package releases outside the detected containers. One ecosystem:package@version per line.">
                 <form wire:submit="savePackages" class="flex flex-col gap-3">

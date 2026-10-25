@@ -210,7 +210,7 @@ class SoftwareRecommendationService
         return $prefix.'Update the application dependency or base image, test it, and redeploy the affected applications through racconify.';
     }
 
-    private function packageUpdates(array $findings): array
+    public function packageUpdates(array $findings): array
     {
         $updates = [];
         foreach ($findings as $finding) {
