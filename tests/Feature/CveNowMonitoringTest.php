@@ -21,6 +21,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Sleep;
 use Livewire\Livewire;
 
 uses(RefreshDatabase::class);
@@ -157,3 +158,32 @@ it('renders detected software and security recommendations with escaped resource
         ->assertDontSee('<script>private-app()</script>', escape: false);
     Http::assertSentCount(1);
 });
+
+it('keeps software recommendations visible when vulnerability lookup is unavailable', function (bool $hasPrevious) {
+    Storage::fake('local');
+    Sleep::fake();
+    $server = cveMonitoringServer();
+    Notification::fake();
+    Http::preventStrayRequests();
+    Http::fake([
+        'api.github.com/repos/nodejs/node/releases*' => Http::response([['tag_name' => 'v24.22.1']]),
+        'cve.now/feed*' => Http::response([], 503),
+    ]);
+    $service = $this->partialMock(CveNowService::class, fn ($mock) => $mock->shouldReceive('collect')->andReturn(['packages' => [], 'runtimes' => [['name' => 'node', 'version' => '24.22.0', 'container' => 'Melody']], 'containers' => [], 'warnings' => []]));
+    if ($hasPrevious) {
+        $service->saveReport($server, ['checked_at' => '2026-10-01T00:00:00Z', 'packages_checked' => 0, 'containers' => [], 'runtimes' => [], 'findings' => []]);
+    }
+
+    (new ServerVulnerabilityCheckJob($server))->handle($service);
+
+    $report = $service->report($server);
+    expect($report['software'][0])->toMatchArray(['target' => '24.22.1', 'contexts' => ['Melody']]);
+    expect($report['error'])->not->toBeEmpty();
+    expect($report['inventory_checked_at'])->not->toBeEmpty();
+    expect($report['checked_at'] ?? null)->toBe($hasPrevious ? '2026-10-01T00:00:00Z' : null);
+    Livewire::test(Vulnerabilities::class, ['server_uuid' => $server->uuid])->assertSee('Vendor target: 24.22.1')->assertSee('Software inventory checked');
+    Notification::assertNothingSent();
+    Http::assertSentCount(4);
+    Sleep::assertSleptTimes(2);
+    Sleep::fake(false);
+})->with(['previous report' => true, 'first scan' => false]);

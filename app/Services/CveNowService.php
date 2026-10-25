@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\Server;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
@@ -161,7 +163,7 @@ class CveNowService
         return Cache::remember($key, 3600, function () use ($path, $query) {
             $url = 'https://cve.now'.$path;
             for ($redirects = 0; $redirects < 4; $redirects++) {
-                $response = Http::acceptJson()->connectTimeout(5)->timeout(25)->withOptions(['allow_redirects' => false])->get($url, $query);
+                $response = Http::acceptJson()->connectTimeout(5)->timeout(25)->retry([500, 2000], 0, fn ($exception) => $exception instanceof ConnectionException || ($exception instanceof RequestException && ($exception->response->serverError() || $exception->response->status() === 429)))->withOptions(['allow_redirects' => false])->get($url, $query);
                 if ($response->redirect()) {
                     $next = $response->header('Location');
                     if (str_starts_with($next, '/') && ! str_starts_with($next, '//')) {
@@ -334,9 +336,9 @@ class CveNowService
         Storage::disk('local')->put($this->path($server, 'settings'), json_encode(['packages' => $text], JSON_THROW_ON_ERROR), 'private');
     }
 
-    public function recordFailure(Server $server): void
+    public function recordFailure(Server $server, array $recommendations = []): void
     {
-        $this->saveReport($server, [...$this->report($server), 'error' => 'The vulnerability check failed. Previous results are retained.', 'failed_at' => now()->toIso8601String()]);
+        $this->saveReport($server, [...$this->report($server), ...$recommendations, 'error' => 'The vulnerability check failed. Previous vulnerability results are retained. Detected software and vendor recommendations may be newer.', 'failed_at' => now()->toIso8601String()]);
     }
 
     private function path(Server $server, string $kind): string
