@@ -4,6 +4,32 @@ use App\Models\Server;
 use App\Services\CveNowService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
+use Symfony\Component\Process\Process;
+
+it('collects inventory through the non-root sudo command parser', function () {
+    $root = sys_get_temp_dir().'/cve-inventory-'.bin2hex(random_bytes(8));
+    mkdir($root, 0700);
+    file_put_contents($root.'/sudo', "#!/bin/sh\nexec \"\$@\"\n");
+    file_put_contents($root.'/docker', "#!/bin/sh\nif [ \"\$1\" = version ]; then printf 29.9.2; fi\n");
+    chmod($root.'/sudo', 0700);
+    chmod($root.'/docker', 0700);
+    try {
+        $server = Mockery::mock(Server::class)->makePartial();
+        $server->shouldReceive('getAttribute')->with('user')->andReturn('ubuntu');
+        $server->shouldReceive('setAttribute')->andReturnSelf();
+        $command = app(CveNowService::class)->inventoryCommand();
+        $parsed = parseCommandsByLineForSudo(collect([$command]), $server);
+        expect($parsed)->toHaveCount(1);
+        $process = new Process(['/bin/bash', '-c', $parsed[0]], env: ['PATH' => $root.':'.getenv('PATH')]);
+        $process->mustRun();
+        $inventory = json_decode($process->getOutput(), true, flags: JSON_THROW_ON_ERROR);
+        expect($inventory['packages'])->toBe([])->and($inventory['runtimes'][0]['version'])->toBe('29.9.2');
+    } finally {
+        unlink($root.'/sudo');
+        unlink($root.'/docker');
+        rmdir($root);
+    }
+});
 
 it('matches installed package versions without exporting container settings', function () {
     Http::preventStrayRequests();

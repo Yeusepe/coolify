@@ -8,6 +8,7 @@ use App\Models\Team;
 use App\Models\User;
 use App\Notifications\Server\VulnerabilitiesFound;
 use App\Services\CveNowService;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -28,7 +29,7 @@ function cveMonitoringServer(string $role = 'owner'): Server
     test()->actingAs($user);
     session(['currentTeam' => $team]);
     $server = Server::factory()->create(['team_id' => $team->id]);
-    $server->settings->update(['is_reachable' => true, 'is_usable' => true]);
+    $server->settings->update(['is_reachable' => true, 'is_usable' => true, 'force_disabled' => false]);
     config(['services.cve_now.enabled' => true]);
 
     return $server;
@@ -60,7 +61,7 @@ it('does not disclose another teams vulnerability report', function () {
     cveMonitoringServer();
     $other = Server::factory()->create(['team_id' => Team::factory()->create()->id]);
 
-    Livewire::test(Vulnerabilities::class, ['server_uuid' => $other->uuid])->assertNotFound();
+    expect(fn () => Livewire::test(Vulnerabilities::class, ['server_uuid' => $other->uuid]))->toThrow(ModelNotFoundException::class);
 });
 
 it('rejects unversioned additional packages without saving or queuing them', function () {
@@ -78,11 +79,14 @@ it('does not notify again for unchanged high severity matches', function () {
     Storage::fake('local');
     $server = cveMonitoringServer();
     Notification::fake();
+    $server->team->discordNotificationSettings()->updateOrCreate([], ['discord_enabled' => true, 'discord_webhook_url' => 'https://discord.com/api/webhooks/test/test', 'server_patch_discord_notifications' => true]);
+    expect($server->isFunctional())->toBeTrue();
     Http::preventStrayRequests();
     Http::fake(['cve.now/stack*' => Http::response(['packages' => 1, 'entries' => [['id' => 'CVE-2026-12345', 'title' => 'Example issue', 'severity' => ['cvss' => 9.1], 'matched' => ['ecosystem' => 'npm', 'name' => 'example', 'version' => '1.0.0'], 'affected' => []]]])]);
     $service = $this->partialMock(CveNowService::class, fn ($mock) => $mock->shouldReceive('collect')->andReturn(['packages' => [['ecosystem' => 'npm', 'name' => 'example', 'version' => '1.0.0', 'container' => 'api']], 'runtimes' => [], 'containers' => [], 'warnings' => []]));
 
     (new ServerVulnerabilityCheckJob($server))->handle($service);
+    expect($service->report($server)['error'])->toBeNull();
     (new ServerVulnerabilityCheckJob($server))->handle($service);
 
     Notification::assertSentTo($server->team, VulnerabilitiesFound::class);

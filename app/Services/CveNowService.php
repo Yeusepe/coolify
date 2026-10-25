@@ -13,8 +13,7 @@ class CveNowService
 {
     public function collect(Server $server): array
     {
-        $script = file_get_contents(resource_path('scripts/cve-inventory.py'));
-        $command = 'python3 -c '.escapeshellarg('import base64; exec(base64.b64decode("'.base64_encode($script).'"))');
+        $command = $this->inventoryCommand();
         $raw = instant_remote_process([$command], $server, timeout: 600, disableMultiplexing: true);
         if (! is_string($raw) || strlen($raw) > 16000000) {
             throw new RuntimeException('The software inventory could not be read.');
@@ -25,6 +24,13 @@ class CveNowService
         }
 
         return $data;
+    }
+
+    public function inventoryCommand(): string
+    {
+        $script = file_get_contents(resource_path('scripts/cve-inventory.py'));
+
+        return 'python3 -c '.escapeshellarg('import base64; exec(base64.b64decode("'.base64_encode($script).'"))');
     }
 
     public function check(array $inventory): array
