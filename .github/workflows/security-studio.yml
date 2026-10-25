@@ -2,8 +2,8 @@ name: Security Studio
 on:
   workflow_dispatch:
   push:
-    branches: [main, security/certificate-trust, security/vendor-node-patches, security/node-brotli-20261021]
-    paths: ['.github/workflows/security-studio.yml']
+    branches: [main, security/certificate-trust, security/vendor-node-patches, security/node-brotli-20261021, security/legacy-dependencies-20261025]
+    paths: ['.github/workflows/security-studio.yml', 'docker/security/vendor-node/zod-compat.cjs']
 permissions:
   contents: read
   packages: write
@@ -31,10 +31,10 @@ jobs:
           import re
           p=Path('pnpm-workspace.yaml')
           text=p.read_text()
-          for name,version in [('next','16.4.2'),('react','19.3.1'),('react-dom','19.3.1')]:
+          for name,version in [('next','16.4.3'),('react','19.3.1'),('react-dom','19.3.1')]:
               text,count=re.subn(r'(?m)^(  '+re.escape(name)+r':) .+$',r'\1 '+version,text)
               assert count==1,(name,count)
-          text,count=re.subn(r'(?m)^overrides:\s*$', "overrides:\n  simple-git: 4.0.1\n  '@simple-git/argv-parser': 2.0.1\n  'picomatch@^2': 2.3.2\n  'picomatch@^4': 4.0.4", text, count=1)
+          text,count=re.subn(r'(?m)^overrides:\s*$', "overrides:\n  'zod@^3': file:./security-zod\n  simple-git: 4.0.1\n  '@simple-git/argv-parser': 2.0.1\n  'picomatch@^2': 2.3.2\n  'picomatch@^4': 4.0.4", text, count=1)
           assert count==1
           text=text.replace('express-rate-limit>ip-address: ^10.1.1','express-rate-limit>ip-address: 10.7.4')
           p.write_text(text)
@@ -43,12 +43,17 @@ jobs:
           text=text.replace('WORKDIR /app','COPY brotli-regression.cjs /tmp/brotli-regression.cjs\nRUN node /tmp/brotli-regression.cjs && rm /tmp/brotli-regression.cjs\nWORKDIR /app',1)
           text=text.replace('apt-get update -qq &&','apt-get update -qq && apt-get upgrade -y &&',1)
           text=text.replace('WORKDIR /app','COPY security-ca.pem /etc/ssl/certs/ca-certificates.crt\nENV NODE_OPTIONS="--use-openssl-ca --max-old-space-size=4096" SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt SSL_CERT_DIR=/run/empty-ca-directory NEXT_TELEMETRY_DISABLED=1\nWORKDIR /app',1)
+          text=text.replace('COPY ./patches/ ./patches', 'COPY ./patches/ ./patches\nCOPY security-zod ./security-zod')
           text=text.replace('FROM base AS production','FROM base AS production\nRUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx',1)
           p.write_text(text)
           PY
           cp ../security/docker/security/bun/ca-certificates.crt security-ca.pem
           cp ../security/docker/security/bun/brotli-regression.cjs brotli-regression.cjs
           npm install -g "$(node -p 'require("./package.json").packageManager')"
+          mkdir -p security-zod
+          npm pack zod@4.6.7 --pack-destination /tmp --ignore-scripts >/dev/null
+          tar -xzf /tmp/zod-4.6.7.tgz --strip-components=1 -C security-zod
+          node -e 'require("../security/docker/security/vendor-node/zod-compat.cjs")(require("path").resolve("security-zod"))'
           pnpm install --lockfile-only --ignore-scripts
       - uses: actions/upload-artifact@v4
         with:
@@ -66,7 +71,7 @@ jobs:
           file: vendor/apps/studio/Dockerfile
           target: production
           push: true
-          tags: ghcr.io/yeusepe/coolify:studio-security-20261021
+          tags: ghcr.io/yeusepe/coolify:studio-legacy-rebuilt-20261025
           labels: |
             org.opencontainers.image.source=https://github.com/Yeusepe/coolify
             org.opencontainers.image.revision=${{ github.sha }}
