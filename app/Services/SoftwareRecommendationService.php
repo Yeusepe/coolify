@@ -28,6 +28,7 @@ class SoftwareRecommendationService
         'mediamtx' => ['MediaMTX', 'bluenviron/mediamtx', 1],
         'postgrest' => ['PostgREST', 'PostgREST/postgrest', 1],
         'kong' => ['Kong', 'Kong/kong', 2],
+        'go' => ['Go runtime', 'go', 2],
         'next' => ['Next.js', 'npm:next', 1],
         'react' => ['React', 'npm:react', 1],
         'fastify' => ['Fastify', 'npm:fastify', 1],
@@ -44,7 +45,7 @@ class SoftwareRecommendationService
     {
         $detected = [];
         foreach ($inventory['runtimes'] ?? [] as $runtime) {
-            $key = $runtime['name'].'@'.$runtime['version'];
+            $key = $runtime['name'].'@'.$runtime['version'].'#'.($runtime['revision'] ?? '');
             $detected[$key]['record'] = $runtime;
             $detected[$key]['contexts'][] = $runtime['container'];
         }
@@ -62,11 +63,18 @@ class SoftwareRecommendationService
             $runtime = $item['record'];
             $name = $runtime['name'];
             $product = self::PRODUCTS[$name] ?? [ucfirst($name), null, 1];
-            $row = ['technology' => $name, 'name' => $product[0], 'version' => $runtime['version'], 'contexts' => array_values(array_unique($item['contexts'])), 'target' => null, 'status' => 'Release lookup unavailable', 'url' => null, 'recommendation' => 'No supported vendor release lookup. Verify the running image with its vendor.'];
+            $row = ['technology' => $name, 'name' => $product[0], 'version' => $runtime['version'], 'revision' => $runtime['revision'] ?? null, 'contexts' => array_values(array_unique($item['contexts'])), 'target' => null, 'status' => 'Release lookup unavailable', 'url' => null, 'recommendation' => 'No supported vendor release lookup. Verify the running image with its vendor.'];
             if ($product[1]) {
                 try {
                     [$versions, $url] = $this->releases($product[1], $runtime['version']);
                     $row['url'] = $url;
+                    if (! preg_match('/^(?:v?\d+\.\d+(?:\.\d+){0,2}(?:[-+][A-Za-z0-9._-]+)?|RELEASE\.\d{4}-\d\d-\d\dT\d\d-\d\d-\d\dZ)$/', $runtime['version'])) {
+                        $row['status'] = 'Build identity requires review';
+                        $row['recommendation'] = 'This binary does not report a comparable release version. Verify its pinned build provenance and security patches before replacing it. Do not assume a vendor image is a safe replacement.';
+                        $software[] = $row;
+
+                        continue;
+                    }
                     $sameLine = array_values(array_filter($versions, fn ($version) => $this->line($version, $product[2]) === $this->line($runtime['version'], $product[2])));
                     $row['target'] = $sameLine[0] ?? $versions[0];
                     $newer = version_compare($this->comparable($row['target']), $this->comparable($runtime['version']), '>');
@@ -75,6 +83,17 @@ class SoftwareRecommendationService
                     if (! $newer && preg_match('/(?:alpha|beta|rc|canary|dev)/i', $runtime['version'])) {
                         $row['status'] = 'Preview build requires review';
                         $row['recommendation'] = 'Keep the pinned security build until a stable release containing its fixes is verified. Do not downgrade automatically.';
+                    }
+                    if ($name === 'bun' && ! $newer && $row['revision'] && $row['target'] === $runtime['version']) {
+                        $referenceUrl = 'https://api.github.com/repos/oven-sh/bun/git/ref/tags/bun-v'.$row['target'];
+                        $reference = Cache::remember('software-build:'.hash('sha256', $referenceUrl), 3600, fn () => Http::acceptJson()->withUserAgent('Racconify-Software-Monitor')->connectTimeout(5)->timeout(20)->withOptions(['allow_redirects' => false])->get($referenceUrl)->throw()->json('object'));
+                        if (! is_array($reference) || ($reference['type'] ?? '') !== 'commit' || ! preg_match('/^[a-f0-9]{40}$/', $reference['sha'] ?? '')) {
+                            throw new UnexpectedValueException('The Bun release build could not be verified.');
+                        }
+                        if (! str_starts_with($reference['sha'], $row['revision'])) {
+                            $row['status'] = 'Build identity requires review';
+                            $row['recommendation'] = 'The version label matches, but the installed Bun build differs from the tagged stable release. Review the pinned security patches and test the stable build before replacing it.';
+                        }
                     }
                 } catch (ConnectionException|RequestException|UnexpectedValueException $exception) {
                     $row['status'] = 'Release lookup failed';
@@ -106,6 +125,7 @@ class SoftwareRecommendationService
             'dotnet' => 'https://builds.dotnet.microsoft.com/dotnet/release-metadata/'.$this->line($installed, 1).'.0/releases.json',
             'postgresql' => 'https://www.postgresql.org/versions.rss',
             'mongodb' => 'https://downloads.mongodb.org/current.json',
+            'go' => 'https://go.dev/dl/?mode=json',
             default => str_starts_with($source, 'npm:') ? 'https://registry.npmjs.org/'.rawurlencode(substr($source, 4)).'/latest' : 'https://api.github.com/repos/'.$source.'/releases?per_page=30',
         };
         $versions = Cache::remember('software-releases:'.hash('sha256', $url), 3600, function () use ($url, $source) {
@@ -120,6 +140,8 @@ class SoftwareRecommendationService
                 $versions = [$data['latest-runtime'] ?? ''];
             } elseif ($source === 'mongodb') {
                 $versions = array_column($data['versions'] ?? [], 'version');
+            } elseif ($source === 'go') {
+                $versions = array_map(fn ($r) => preg_replace('/^go/', '', $r['version'] ?? ''), array_filter(is_array($data) ? $data : [], fn ($r) => is_array($r) && ($r['stable'] ?? false)));
             } else {
                 $versions = [];
                 foreach (is_array($data) ? $data : [] as $release) {
@@ -147,6 +169,7 @@ class SoftwareRecommendationService
             'dotnet' => 'https://dotnet.microsoft.com/en-us/download/dotnet/'.$this->line($installed, 1).'.0',
             'postgresql' => 'https://www.postgresql.org/support/versioning/',
             'mongodb' => 'https://www.mongodb.com/docs/manual/release-notes/',
+            'go' => 'https://go.dev/doc/devel/release',
             default => str_starts_with($source, 'npm:') ? 'https://www.npmjs.com/package/'.rawurlencode(substr($source, 4)) : 'https://github.com/'.$source.'/releases',
         };
 

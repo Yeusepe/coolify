@@ -32,6 +32,27 @@ it('recommends stable Bun over its preview without treating preview as a release
     Http::assertSentCount(1);
 });
 
+it('requires review when a Bun build has the stable version label but a different source revision', function () {
+    Http::preventStrayRequests();
+    Http::fake([
+        'api.github.com/repos/oven-sh/bun/releases*' => Http::response([['tag_name' => 'bun-v1.4.4']]),
+        'api.github.com/repos/oven-sh/bun/git/ref/tags/bun-v1.4.4' => Http::response(['object' => ['type' => 'commit', 'sha' => str_repeat('a', 40)]]),
+    ]);
+    $result = app(SoftwareRecommendationService::class)->recommend(['runtimes' => [['name' => 'bun', 'version' => '1.4.4', 'revision' => str_repeat('b', 40), 'container' => 'Creator Payments']]], []);
+
+    expect($result['software'][0])->toMatchArray(['target' => '1.4.4', 'status' => 'Build identity requires review']);
+    Http::assertSentCount(2);
+});
+
+it('does not recommend replacing an unversioned custom binary based on a version comparison', function () {
+    Http::preventStrayRequests();
+    Http::fake(['api.github.com/repos/minio/minio/releases*' => Http::response([['tag_name' => 'RELEASE.2026-10-17T13-05-03Z']])]);
+    $result = app(SoftwareRecommendationService::class)->recommend(['runtimes' => [['name' => 'minio', 'version' => 'DEVELOPMENT.GOGET', 'container' => 'Payments object storage']]], []);
+
+    expect($result['software'][0])->toMatchArray(['target' => null, 'status' => 'Build identity requires review']);
+    Http::assertSentCount(1);
+});
+
 it('reads database and dotnet releases from their vendors while preserving their installed lines', function () {
     Http::preventStrayRequests();
     Http::fake([

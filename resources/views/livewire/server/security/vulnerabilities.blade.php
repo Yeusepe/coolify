@@ -22,9 +22,10 @@
                     <x-application.settings-section title="Detected software and update recommendations" helper="Vendor releases are checked for the installed release line. Recommendations never change software automatically.">
                         @if (!empty($report['host']))<p class="mb-3 text-xs text-neutral-600 dark:text-fg-dim">{{ $report['host']['os'] ?? '' }} · Kernel {{ $report['host']['kernel'] ?? '' }}</p>@endif
                         @forelse ($report['software'] as $software)
-                            <details class="border-b border-neutral-200 py-3 dark:border-white/[0.08]" wire:key="software-{{ hash('sha256', $software['technology'].$software['version']) }}">
+                            <details class="border-b border-neutral-200 py-3 dark:border-white/[0.08]" wire:key="software-{{ hash('sha256', $software['technology'].$software['version'].($software['revision'] ?? '')) }}">
                                 <summary class="cursor-pointer text-sm"><span class="font-medium">{{ $software['name'] }} {{ $software['version'] }}</span> · {{ $software['status'] }}{{ $software['target'] ? '. Vendor target: '.$software['target'] : '' }}</summary>
                                 <p class="mt-2 break-words text-xs">{{ implode(', ', $software['contexts']) }}</p>
+                                @if ($software['revision'] ?? null)<p class="mt-2 break-words font-mono text-xs">Build {{ $software['revision'] }}</p>@endif
                                 <p class="mt-2 text-xs text-neutral-600 dark:text-fg-dim">{{ $software['recommendation'] }}</p>
                                 @if ($software['url'])<a class="mt-2 inline-block text-xs underline" href="{{ $software['url'] }}" target="_blank" rel="noopener noreferrer">Official releases</a>@endif
                             </details>
