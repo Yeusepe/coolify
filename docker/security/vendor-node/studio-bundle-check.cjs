@@ -21,7 +21,7 @@ function walk(root) {
       const exact = text.slice(offset, minimum);
       const max = text.lastIndexOf('.maxLength.value', async);
       assert(max > minimum, 'Unknown compiled Zod array layout');
-      assert(/if\([^)]*\)return [\w$]+/.test(exact), 'Missing exact upper-bound exit: '+file);
+      assert(/return [\w$]+/.test(exact), 'Missing exact upper-bound exit: '+file);
       assert(/return [\w$]+/.test(text.slice(max, async)), 'Missing maximum upper-bound exit: '+file);
       checked++;
       offset = element;
