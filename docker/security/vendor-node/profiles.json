@@ -24,7 +24,9 @@
     "root": "/app/node_modules",
     "packages": {
       "undici": {
-        "7": "7.30.1"
+        "7": "7.30.1",
+        "6": "6.29.1",
+        "8": "8.12.3"
       },
       "ip-address": {
         "10": "10.7.4"
@@ -45,6 +47,12 @@
       },
       "@opentelemetry/instrumentation-cassandra-driver": {
         "0": "0.66.0"
+      },
+      "@opentelemetry/instrumentation-knex": {
+        "0": "0.65.0"
+      },
+      "@opentelemetry/instrumentation-oracledb": {
+        "0": "0.46.0"
       }
     }
   }
