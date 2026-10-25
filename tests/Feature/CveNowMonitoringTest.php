@@ -93,3 +93,22 @@ it('does not notify again for unchanged high severity matches', function () {
     Notification::assertSentTimes(VulnerabilitiesFound::class, 1);
     expect(Cache::has('cve-now:pending:'.$server->uuid))->toBeFalse();
 });
+
+it('keeps uncertain runtime advisories visible without urgent notifications', function () {
+    Storage::fake('local');
+    $server = cveMonitoringServer();
+    Notification::fake();
+    $server->team->discordNotificationSettings()->updateOrCreate([], ['discord_enabled' => true, 'discord_webhook_url' => 'https://discord.com/api/webhooks/test/test', 'server_patch_discord_notifications' => true]);
+    Http::preventStrayRequests();
+    Http::fake([
+        'cve.now/feed*' => Http::response(['items' => [['id' => 'CVE-2026-12345']]]),
+        'cve.now/api/v1/entries/CVE-2026-12345' => Http::response(['id' => 'CVE-2026-12345', 'title' => 'Review needed', 'severity' => ['cvss' => 9.8], 'affected' => [['product' => 'PHP', 'ranges' => []]]]),
+    ]);
+    $service = $this->partialMock(CveNowService::class, fn ($mock) => $mock->shouldReceive('collect')->andReturn(['packages' => [], 'runtimes' => [['name' => 'php', 'version' => '8.4.27', 'container' => 'control']], 'containers' => [], 'warnings' => []]));
+
+    (new ServerVulnerabilityCheckJob($server))->handle($service);
+
+    expect($service->report($server)['findings'])->toHaveCount(1)
+        ->and($service->report($server)['notified'])->toBe([]);
+    Notification::assertNothingSent();
+});
