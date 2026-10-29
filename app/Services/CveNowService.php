@@ -227,14 +227,21 @@ class CveNowService
         }
         ksort($images);
 
-        return hash('sha256', json_encode([$finding['id'], $finding['ecosystem'], $finding['package'], $finding['version'], $images], JSON_THROW_ON_ERROR));
+        return hash('sha256', json_encode([$finding['id'], $finding['ecosystem'], $finding['package'], $finding['version'], $finding['advisory_modified_at'] ?? null, $finding['fixed'] ?? [], $images], JSON_THROW_ON_ERROR));
     }
 
     public function applyReviews(array $report, array $reviews): array
     {
         $active = [];
         $reviewed = [];
-        foreach ($report['findings'] as $finding) {
+        $seen = [];
+        foreach ([...$report['findings'], ...($report['reviewed_findings'] ?? [])] as $finding) {
+            unset($finding['review']);
+            $key = json_encode([$finding['id'], $finding['ecosystem'], $finding['package'], $finding['version'], $finding['contexts']], JSON_THROW_ON_ERROR);
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
             $fingerprint = $this->findingFingerprint($finding, $report);
             $review = collect($reviews)->first(fn ($review) => $fingerprint !== null && ($review['fingerprint'] ?? null) === $fingerprint && in_array($review['status'] ?? '', ['Verified image backport', 'Vendor backport verified', 'Not affected', 'Withdrawn advisory'], true) && ! empty($review['reason']) && filter_var($review['source'] ?? '', FILTER_VALIDATE_URL) && parse_url($review['source'], PHP_URL_SCHEME) === 'https');
             if ($review) {
@@ -367,7 +374,7 @@ class CveNowService
         $fixed = array_values(array_unique($fixed));
         sort($fixed);
 
-        return ['id' => $id, 'title' => mb_substr($entry['title'] ?? $entry['originalDescription'] ?? $id, 0, 500), 'score' => (float) ($entry['severity']['cvss'] ?? 0), 'known_exploited' => (bool) ($entry['exploitation']['kev'] ?? false), 'package' => $package['name'], 'version' => $package['version'], 'ecosystem' => $package['ecosystem'], 'contexts' => $contexts, 'kind' => $kind, 'fixed' => $fixed, 'url' => 'https://cve.now/'.rawurlencode($id)];
+        return ['id' => $id, 'title' => mb_substr($entry['title'] ?? $entry['originalDescription'] ?? $id, 0, 500), 'score' => (float) ($entry['severity']['cvss'] ?? 0), 'known_exploited' => (bool) ($entry['exploitation']['kev'] ?? false), 'package' => $package['name'], 'version' => $package['version'], 'ecosystem' => $package['ecosystem'], 'contexts' => $contexts, 'kind' => $kind, 'fixed' => $fixed, 'advisory_modified_at' => $entry['modifiedAt'] ?? null, 'url' => 'https://cve.now/'.rawurlencode($id)];
     }
 
     public function parsePackages(string $text): array

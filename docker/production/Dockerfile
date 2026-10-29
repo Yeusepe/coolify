@@ -175,6 +175,7 @@ RUN mkdir -p /usr/local/bin && \
 
 # Configure PHP
 COPY docker/production/etc/php/conf.d/zzz-custom-php.ini /usr/local/etc/php/conf.d/zzz-custom-php.ini
+RUN php -r 'if (ini_get("session.upload_progress.enabled") !== "0") exit(1);'
 ENV PHP_OPCACHE_ENABLE=1
 
 # Configure entrypoint

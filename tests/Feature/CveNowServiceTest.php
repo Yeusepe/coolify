@@ -214,6 +214,11 @@ it('binds a reviewed fix to the exact image and keeps it visible separately', fu
 
     expect($reviewed['findings'])->toBe([]);
     expect($reviewed['reviewed_findings'][0]['review'])->toBe($review);
+    expect($service->applyReviews($reviewed, [$review])['reviewed_findings'])->toHaveCount(1);
+    expect($service->applyReviews($reviewed, [])['findings'])->toBe([$finding]);
+    $changed = $report;
+    $changed['findings'][0]['advisory_modified_at'] = '2026-10-30T00:00:00Z';
+    expect($service->applyReviews($changed, [$review])['findings'])->toHaveCount(1);
     $report['containers'][0]['image_id'] = 'sha256:'.str_repeat('b', 64);
     expect($service->applyReviews($report, [$review])['findings'])->toBe([$finding]);
 });
@@ -225,4 +230,11 @@ it('does not dismiss a finding without complete image provenance or a valid revi
 
     expect($service->findingFingerprint($finding, $report))->toBeNull();
     expect($service->applyReviews($report, [['fingerprint' => null, 'status' => 'Verified image backport', 'reason' => 'Unverified', 'source' => 'javascript:alert(1)']])['findings'])->toBe([$finding]);
+});
+
+it('keeps old Node branches bounded and accepts PostgreSQL major boundaries', function () {
+    $service = app(CveNowService::class);
+    expect($service->inRanges('24.22.1', [['introduced' => '4.0', 'fixed' => '4.*'], ['introduced' => '20.0', 'fixed' => '20.5.1']]))->toBeFalse()
+        ->and($service->inRanges('17.2', [['introduced' => '17', 'fixed' => '17.3']]))->toBeTrue()
+        ->and($service->inRanges('17.3', [['introduced' => '17', 'fixed' => '17.3']]))->toBeFalse();
 });
