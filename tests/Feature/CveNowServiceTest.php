@@ -168,3 +168,73 @@ it('recognizes patched runtime releases when following the official advisory CDN
 
     expect($report['findings'])->toHaveCount($expected);
 })->with([['24.22.0', 1], ['24.22.1', 0]]);
+
+it('restores missing release boundaries from the published CNA record', function (string $installed, int $expected) {
+    Http::preventStrayRequests();
+    Http::fake([
+        'cve.now/feed*' => Http::response(['items' => [['id' => 'CVE-2026-12345']]]),
+        'cve.now/api/v1/entries/CVE-2026-12345' => Http::response(['id' => 'CVE-2026-12345', 'affected' => [['product' => 'PHP', 'ranges' => [['fixed' => '8.4.27'], ['fixed' => '8.5.12']]]]]),
+        'raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2026/12xxx/CVE-2026-12345.json' => Http::response([
+            'cveMetadata' => ['cveId' => 'CVE-2026-12345', 'state' => 'PUBLISHED'],
+            'containers' => ['cna' => ['affected' => [['product' => 'PHP', 'versions' => [
+                ['status' => 'affected', 'version' => '8.4.*', 'lessThan' => '8.4.27'],
+                ['status' => 'affected', 'version' => '8.5.*', 'lessThan' => '8.5.12'],
+            ]]]]],
+        ]),
+    ]);
+
+    $report = app(CveNowService::class)->check(['packages' => [], 'runtimes' => [['name' => 'php', 'version' => $installed, 'container' => 'control']]]);
+
+    expect($report['findings'])->toHaveCount($expected);
+    Http::assertSent(fn ($request) => str_starts_with($request->url(), 'https://raw.githubusercontent.com/CVEProject/cvelistV5/'));
+})->with([['8.4.26', 1], ['8.4.27', 0], ['8.5.11', 1]]);
+
+it('retains an uncertain advisory when its missing primary boundaries cannot be verified', function () {
+    Http::preventStrayRequests();
+    Http::fake([
+        'cve.now/feed*' => Http::response(['items' => [['id' => 'CVE-2026-12345']]]),
+        'cve.now/api/v1/entries/CVE-2026-12345' => Http::response(['id' => 'CVE-2026-12345', 'affected' => [['product' => 'node', 'ranges' => [['introduced' => '4.0']]]]]),
+        'raw.githubusercontent.com/CVEProject/cvelistV5/*' => Http::response([], 503),
+    ]);
+
+    $report = app(CveNowService::class)->check(['packages' => [], 'runtimes' => [['name' => 'node', 'version' => '24.22.1', 'container' => 'api']]]);
+
+    expect($report['findings'])->toHaveCount(1);
+    expect($report['findings'][0]['kind'])->toBe('Technology advisory. Check vendor applicability');
+    Http::assertSentCount(3);
+});
+
+it('binds a reviewed fix to the exact image and keeps it visible separately', function () {
+    $service = app(CveNowService::class);
+    $finding = ['id' => 'CVE-2026-12345', 'ecosystem' => 'npm', 'package' => 'example', 'version' => '1.0.0', 'contexts' => ['API']];
+    $report = ['findings' => [$finding], 'containers' => [['name' => 'api', 'resource' => 'API', 'image_id' => 'sha256:'.str_repeat('a', 64)]]];
+    $review = ['fingerprint' => $service->findingFingerprint($finding, $report), 'status' => 'Verified image backport', 'reason' => 'Regression-tested upstream fix.', 'source' => 'https://example.com/advisory'];
+
+    $reviewed = $service->applyReviews($report, [$review]);
+
+    expect($reviewed['findings'])->toBe([]);
+    expect($reviewed['reviewed_findings'][0]['review'])->toBe($review);
+    expect($service->applyReviews($reviewed, [$review])['reviewed_findings'])->toHaveCount(1);
+    expect($service->applyReviews($reviewed, [])['findings'])->toBe([$finding]);
+    $changed = $report;
+    $changed['findings'][0]['advisory_modified_at'] = '2026-10-30T00:00:00Z';
+    expect($service->applyReviews($changed, [$review])['findings'])->toHaveCount(1);
+    $report['containers'][0]['image_id'] = 'sha256:'.str_repeat('b', 64);
+    expect($service->applyReviews($report, [$review])['findings'])->toBe([$finding]);
+});
+
+it('does not dismiss a finding without complete image provenance or a valid review', function () {
+    $service = app(CveNowService::class);
+    $finding = ['id' => 'CVE-2026-12345', 'ecosystem' => 'npm', 'package' => 'example', 'version' => '1.0.0', 'contexts' => ['API']];
+    $report = ['findings' => [$finding], 'containers' => [['name' => 'api', 'resource' => 'API']]];
+
+    expect($service->findingFingerprint($finding, $report))->toBeNull();
+    expect($service->applyReviews($report, [['fingerprint' => null, 'status' => 'Verified image backport', 'reason' => 'Unverified', 'source' => 'javascript:alert(1)']])['findings'])->toBe([$finding]);
+});
+
+it('keeps old Node branches bounded and accepts PostgreSQL major boundaries', function () {
+    $service = app(CveNowService::class);
+    expect($service->inRanges('24.22.1', [['introduced' => '4.0', 'fixed' => '4.*'], ['introduced' => '20.0', 'fixed' => '20.5.1']]))->toBeFalse()
+        ->and($service->inRanges('17.2', [['introduced' => '17', 'fixed' => '17.3']]))->toBeTrue()
+        ->and($service->inRanges('17.3', [['introduced' => '17', 'fixed' => '17.3']]))->toBeFalse();
+});

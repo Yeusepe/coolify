@@ -2,7 +2,7 @@ name: Security vendor Node libraries
 on:
   workflow_dispatch:
   push:
-    branches: [main, security/vendor-node-patches, security/node-brotli-20261021, security/reviewed-runtime-patches-20261025, security/nested-runtime-copies, security/legacy-dependencies-20261025]
+    branches: [main, security/vendor-node-patches, security/node-brotli-20261021, security/reviewed-runtime-patches-20261025, security/nested-runtime-copies, security/legacy-dependencies-20261025, fix/security-advisory-matching-20261029]
     paths: ['docker/security/vendor-node/**', '.github/workflows/security-vendor-node.yml', 'docker/security/bun/brotli-regression.cjs']
 permissions:
   contents: read
@@ -21,9 +21,6 @@ jobs:
           - name: storage
             base: ghcr.io/yeusepe/coolify@sha256:16b22a77370bbb87f8bb81606263a28d8babe8bb577e882a1543e9f9fd5af78a
             node: node:24.22.1-alpine3.23@sha256:0468540aa58203ff9e40c2aab3907c52644ab818af6176b1c70a026137dc92a2
-          - name: studio
-            base: ghcr.io/yeusepe/coolify@sha256:c8622bc6f8ee48aed6387a6a46ac80d2155ec7158ac497f2d09415aa74f35b73
-            node: node:22.23.4-bookworm-slim@sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
@@ -37,7 +34,7 @@ jobs:
           context: .
           file: docker/security/vendor-node/Dockerfile.dependencies
           push: true
-          tags: ghcr.io/yeusepe/coolify:security-${{ matrix.name }}-legacy-20261025
+          tags: ghcr.io/yeusepe/coolify:security-${{ matrix.name }}-advisory-20261029
           build-args: |
             BASE_IMAGE=${{ matrix.base }}
             PROFILE=${{ matrix.name }}

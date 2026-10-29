@@ -26,6 +26,20 @@ use Livewire\Livewire;
 
 uses(RefreshDatabase::class);
 
+it('keeps verified fixes visible and escapes their review evidence', function () {
+    Storage::fake('local');
+    $server = cveMonitoringServer();
+    app(CveNowService::class)->saveReport($server, ['checked_at' => now()->toIso8601String(), 'packages_checked' => 0, 'runtimes' => [], 'containers' => [], 'findings' => [], 'reviewed_findings' => [[
+        'id' => 'CVE-2026-12345', 'package' => 'example', 'version' => '1.0.0', 'contexts' => ['API'],
+        'review' => ['fingerprint' => str_repeat('a', 64), 'status' => 'Verified image backport', 'reason' => '<script>bad()</script>', 'source' => 'https://example.com/advisory'],
+    ]]]);
+
+    Livewire::test(Vulnerabilities::class, ['server_uuid' => $server->uuid])
+        ->assertSee('Verified image backport')
+        ->assertSee('&lt;script&gt;bad()&lt;/script&gt;', escape: false)
+        ->assertDontSee('<script>bad()</script>', escape: false);
+});
+
 function cveMonitoringServer(string $role = 'owner'): Server
 {
     Server::flushIdentityMap();
