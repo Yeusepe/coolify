@@ -137,7 +137,12 @@ class CveNowService
                         continue;
                     }
                     foreach ($runtimes as $runtime) {
-                        $match = $this->inRanges($runtime['version'], $affected['ranges'] ?? []);
+                        $ranges = $affected['ranges'] ?? [];
+                        $ambiguous = ! $ranges || collect($ranges)->contains(fn ($range) => ! isset($range['introduced']) || ! isset($range['fixed']) && ! isset($range['lastAffected']) && ! isset($range['last_affected']) || preg_match('/^\d+(?:\.\d+)?$/', $range['introduced'] ?? ''));
+                        if ($ambiguous) {
+                            $ranges = $this->primaryRuntimeRanges($id, $products);
+                        }
+                        $match = $ranges === null ? null : $this->inRanges($runtime['version'], $ranges);
                         if ($match === false) {
                             continue;
                         }
@@ -154,6 +159,92 @@ class CveNowService
         usort($findings, fn ($a, $b) => $b['score'] <=> $a['score']);
 
         return ['checked_at' => now()->toIso8601String(), 'packages_checked' => count($packages), 'containers' => $inventory['containers'] ?? [], 'runtimes' => $inventory['runtimes'] ?? [], 'warnings' => $inventory['warnings'] ?? [], 'findings' => $findings, 'error' => null];
+    }
+
+    private function primaryRuntimeRanges(string $id, array $products): ?array
+    {
+        if (! preg_match('/^CVE-(\d{4})-(\d{4,})$/', $id, $parts)) {
+            return null;
+        }
+        $url = 'https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/'.$parts[1].'/'.substr($parts[2], 0, -3).'xxx/'.$id.'.json';
+        try {
+            $record = Cache::remember('cve-now:primary:'.$id, 3600, fn () => Http::acceptJson()->connectTimeout(5)->timeout(15)->withOptions(['allow_redirects' => false])->get($url)->throw()->json());
+            if (($record['cveMetadata']['cveId'] ?? '') !== $id || ($record['cveMetadata']['state'] ?? '') !== 'PUBLISHED') {
+                return null;
+            }
+            $ranges = [];
+            foreach ($record['containers']['cna']['affected'] ?? [] as $product) {
+                if (! in_array(strtolower($product['product'] ?? ''), $products, true)) {
+                    continue;
+                }
+                foreach ($product['versions'] ?? [] as $version) {
+                    if (($version['status'] ?? '') !== 'affected') {
+                        continue;
+                    }
+                    $start = $version['version'] ?? '';
+                    if (! preg_match('/^\d+(?:\.\d+){0,3}(?:\.(?:\*|x))?$/i', $start) || ! empty($version['changes'])) {
+                        return null;
+                    }
+                    $range = ['introduced' => $start];
+                    if (isset($version['lessThan'])) {
+                        $range['fixed'] = $version['lessThan'];
+                    } else {
+                        $range['lastAffected'] = $version['lessThanOrEqual'] ?? $start;
+                    }
+                    $ranges[] = $range;
+                }
+            }
+
+            return $ranges ?: null;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    public function findingFingerprint(array $finding, array $report): ?string
+    {
+        $images = [];
+        foreach ($finding['contexts'] ?? [] as $context) {
+            $ids = [];
+            foreach ($report['containers'] ?? [] as $container) {
+                if (($container['resource'] ?? $container['name']) !== $context) {
+                    continue;
+                }
+                if (! preg_match('/^sha256:[a-f0-9]{64}$/', $container['image_id'] ?? '')) {
+                    return null;
+                }
+                $ids[] = $container['image_id'];
+            }
+            if (! $ids) {
+                return null;
+            }
+            $ids = array_values(array_unique($ids));
+            sort($ids);
+            $images[$context] = $ids;
+        }
+        if (! $images) {
+            return null;
+        }
+        ksort($images);
+
+        return hash('sha256', json_encode([$finding['id'], $finding['ecosystem'], $finding['package'], $finding['version'], $images], JSON_THROW_ON_ERROR));
+    }
+
+    public function applyReviews(array $report, array $reviews): array
+    {
+        $active = [];
+        $reviewed = [];
+        foreach ($report['findings'] as $finding) {
+            $fingerprint = $this->findingFingerprint($finding, $report);
+            $review = collect($reviews)->first(fn ($review) => $fingerprint !== null && ($review['fingerprint'] ?? null) === $fingerprint && in_array($review['status'] ?? '', ['Verified image backport', 'Vendor backport verified', 'Not affected', 'Withdrawn advisory'], true) && ! empty($review['reason']) && filter_var($review['source'] ?? '', FILTER_VALIDATE_URL) && parse_url($review['source'], PHP_URL_SCHEME) === 'https');
+            if ($review) {
+                $reviewed[] = [...$finding, 'review' => $review];
+            } else {
+                $active[] = $finding;
+            }
+        }
+
+        return [...$report, 'findings' => $active, 'reviewed_findings' => $reviewed, 'reviews' => $reviews];
     }
 
     private function request(string $path, array $query = []): array
@@ -224,7 +315,7 @@ class CveNowService
             }
             $invalid = false;
             foreach (array_filter([$start === '0' ? null : $start, $fixed, $last]) as $boundary) {
-                if (! preg_match('/^v?\d+(?:\.\d+){1,3}(?:[-+][A-Za-z0-9.-]+)?$/', $boundary)) {
+                if (! preg_match('/^v?\d+(?:\.\d+){0,3}(?:[-+][A-Za-z0-9.-]+)?$/', $boundary)) {
                     $invalid = true;
                 }
             }

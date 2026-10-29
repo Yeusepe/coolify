@@ -74,6 +74,18 @@
                         <x-forms.button wire:click="$set('page', {{ $page + 1 }})" :disabled="$page >= $pages">Next</x-forms.button>
                     </div>
                 </x-application.settings-section>
+                @if (!empty($report['reviewed_findings']))
+                <x-application.settings-section title="Verified fixes and vendor reviews" helper="Reviews apply to the exact deployed images. Changing an image requires a new review.">
+                    @foreach ($report['reviewed_findings'] as $finding)
+                        <details class="border-b border-neutral-200 py-3 dark:border-white/[0.08]" wire:key="reviewed-{{ $finding['review']['fingerprint'] }}">
+                            <summary class="cursor-pointer text-sm">{{ $finding['id'] }} · {{ $finding['package'] }} {{ $finding['version'] }} · {{ $finding['review']['status'] }}</summary>
+                            <p class="mt-2 text-xs">{{ implode(', ', $finding['contexts']) }}</p>
+                            <p class="mt-2 text-xs">{{ $finding['review']['reason'] }}</p>
+                            <a class="mt-2 inline-block text-xs underline" href="{{ $finding['review']['source'] }}" target="_blank" rel="noopener noreferrer">Verification source</a>
+                        </details>
+                    @endforeach
+                </x-application.settings-section>
+                @endif
                 @if (!isset($report['software']))
                 <x-application.settings-section title="Detected runtimes" helper="Versions read from the running server and containers.">
                     @foreach ($report['runtimes'] as $runtime)<p class="break-words py-1 font-mono text-xs">{{ $runtime['container'] }} · {{ $runtime['name'] }} {{ $runtime['version'] }}</p>@endforeach
