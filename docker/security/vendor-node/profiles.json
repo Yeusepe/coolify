@@ -2,6 +2,15 @@
   "meta": {
     "root": "/usr/src/app/node_modules",
     "packages": {
+      "@opentelemetry/instrumentation-mysql": {
+        "0": "0.67.0"
+      },
+      "@opentelemetry/instrumentation-cassandra-driver": {
+        "0": "0.66.0"
+      },
+      "@opentelemetry/instrumentation-oracledb": {
+        "0": "0.46.0"
+      },
       "fast-uri": {
         "2": "2.4.8",
         "3": "3.1.9"
