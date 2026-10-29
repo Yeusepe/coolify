@@ -51,6 +51,12 @@
   "storage": {
     "root": "/app/node_modules",
     "packages": {
+      "@opentelemetry/instrumentation-mysql2": {
+        "0": "0.67.0"
+      },
+      "@opentelemetry/instrumentation-tedious": {
+        "0": "0.40.0"
+      },
       "brace-expansion": {
         "2": "2.1.7",
         "5": "5.0.12"
