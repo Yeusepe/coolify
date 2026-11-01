@@ -60,11 +60,14 @@ it('escapes advisory text and queues only one pending check', function () {
     Storage::fake('local');
     $server = cveMonitoringServer();
     Queue::fake([ServerVulnerabilityCheckJob::class]);
-    app(CveNowService::class)->saveReport($server, ['checked_at' => now()->toIso8601String(), 'packages_checked' => 1, 'containers' => [], 'runtimes' => [], 'findings' => [['id' => 'CVE-2026-12345', 'title' => '<script>alert(1)</script>', 'score' => 9.1, 'package' => 'example', 'version' => '1.0.0', 'ecosystem' => 'npm', 'contexts' => ['api'], 'kind' => 'Package version match', 'fixed' => ['1.0.1'], 'url' => 'https://cve.now/CVE-2026-12345']]]);
+    app(CveNowService::class)->saveReport($server, ['checked_at' => now()->toIso8601String(), 'packages_checked' => 1, 'containers' => [], 'runtimes' => [], 'enclave_updated_at' => now()->toIso8601String(), 'findings' => [['id' => 'CVE-2026-12345', 'title' => '<script>alert(1)</script>', 'score' => 9.1, 'package' => 'example', 'version' => '1.0.0', 'ecosystem' => 'npm', 'contexts' => ['api'], 'kind' => 'Package version match', 'fixed' => ['1.0.1'], 'url' => 'https://cve.now/CVE-2026-12345', 'enclave' => ['url' => 'https://app.enclave.ai/threat-feed/CVE-2026-12345', 'stage' => 'reported', 'ransomware' => true]]]]);
 
     Livewire::test(Vulnerabilities::class, ['server_uuid' => $server->uuid])
         ->assertSee('&lt;script&gt;alert(1)&lt;/script&gt;', escape: false)
         ->assertDontSee('<script>alert(1)</script>', escape: false)
+        ->assertSee('Enclave feed refreshed')
+        ->assertSee('Exploitation reported, unconfirmed')
+        ->assertSee('Ransomware use reported.')
         ->call('refreshReport')->call('refreshReport');
 
     Queue::assertPushed(ServerVulnerabilityCheckJob::class, 1);
