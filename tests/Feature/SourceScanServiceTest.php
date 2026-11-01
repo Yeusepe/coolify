@@ -28,3 +28,14 @@ it('keeps partial coverage explicit and replaces old results only with a new res
     expect($report['repositories'][0]['files_scanned'])->toBe(0);
     expect($report['repositories'][0])->toHaveKey('checked_at');
 });
+
+it('does not mark budget-deferred repositories as attempted', function () {
+    $service = app(SourceScanService::class);
+    $previous = ['repositories' => [['id' => 'one', 'repository' => 'owner/app', 'attempted_at' => '2026-10-30T00:00:00Z', 'findings' => [['path' => 'app.ts']]]]];
+    $inventory = ['targets' => [['id' => 'one', 'repository' => 'owner/app'], ['id' => 'two', 'repository' => 'owner/new']], 'unsupported' => []];
+    $report = $service->merge($previous, $inventory, ['one' => ['status' => 'deferred'], 'two' => ['status' => 'deferred']]);
+    expect($report['repositories'][0]['attempted_at'])->toBe('2026-10-30T00:00:00Z');
+    expect($report['repositories'][0]['findings'])->toBe([['path' => 'app.ts']]);
+    expect($report['repositories'][1]['attempted_at'])->toBeNull();
+    expect($report['repositories'][1]['status'])->toBe('deferred');
+});

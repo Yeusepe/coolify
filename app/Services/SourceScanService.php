@@ -74,7 +74,10 @@ class SourceScanService
             $targets[$id] = $target;
         }
 
-        return ['targets' => array_values($targets), 'unsupported' => $unsupported];
+        $previous = collect($this->report($server)['repositories'] ?? [])->keyBy('id');
+        $targets = collect($targets)->sortBy(fn ($target) => $previous->get($target['id'])['attempted_at'] ?? $previous->get($target['id'])['checked_at'] ?? '')->values()->all();
+
+        return ['targets' => $targets, 'unsupported' => $unsupported];
     }
 
     public function collect(Server $server): array
@@ -117,11 +120,12 @@ class SourceScanService
         foreach ($inventory['targets'] as $target) {
             unset($target['token'], $target['private_key'], $target['unavailable']);
             $result = $results[$target['id']] ?? ['status' => 'failed', 'error' => 'Repository credentials or source access are unavailable.'];
-            if (($result['status'] ?? 'failed') === 'failed') {
+            if (in_array($result['status'] ?? 'failed', ['failed', 'deferred'], true)) {
                 $old = collect($previous['repositories'] ?? [])->firstWhere('id', $target['id']) ?? collect($previous['repositories'] ?? [])->firstWhere('repository', $target['repository']) ?? [];
-                $repositories[] = [...$old, ...$target, 'status' => 'failed', 'error' => 'Repository fetch or isolated scan failed. Previous findings, if any, remain below.', 'attempted_at' => now()->toIso8601String()];
+                $deferred = ($result['status'] ?? '') === 'deferred';
+                $repositories[] = [...$old, ...$target, 'status' => $deferred ? 'deferred' : 'failed', 'error' => $deferred ? 'Scan time budget reached. This repository will be prioritized on the next run. Previous findings, if any, remain below.' : 'Repository fetch or isolated scan failed. Previous findings, if any, remain below.', 'attempted_at' => $deferred ? ($old['attempted_at'] ?? $old['checked_at'] ?? null) : now()->toIso8601String()];
             } else {
-                $repositories[] = [...$target, ...$result, 'checked_at' => now()->toIso8601String()];
+                $repositories[] = [...$target, ...$result, 'checked_at' => now()->toIso8601String(), 'attempted_at' => now()->toIso8601String()];
             }
         }
 

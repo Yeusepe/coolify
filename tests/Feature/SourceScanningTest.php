@@ -89,6 +89,11 @@ it('scans only the server owning teams apps and deduplicates matching references
     expect($inventory['targets'])->toHaveCount(1);
     expect($inventory['targets'][0]['applications'])->toBe(['API', 'Worker']);
     expect(json_encode($inventory))->not->toContain('FOREIGN_PRIVATE');
+    app(SourceScanService::class)->saveReport($server, ['repositories' => [['id' => $inventory['targets'][0]['id'], 'attempted_at' => now()->toIso8601String()]]]);
+    Application::factory()->create([...$attributes, 'name' => 'Unscanned', 'git_repository' => 'owner/unscanned']);
+    $next = app(SourceScanService::class)->targets($server);
+    expect($next['targets'][0]['repository'])->toBe('owner/unscanned');
+    expect($next['targets'][1]['repository'])->toBe('owner/app');
 });
 
 it('retains the last source report when the remote scan fails', function () {

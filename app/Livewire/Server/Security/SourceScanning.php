@@ -41,7 +41,7 @@ class SourceScanning extends Component
         $findings = [];
         foreach ($report['repositories'] ?? [] as $repository) {
             foreach ($repository['findings'] ?? [] as $finding) {
-                $findings[] = [...$finding, 'repository' => $repository['repository'], 'commit' => $repository['commit'], 'stale' => $repository['status'] === 'failed'];
+                $findings[] = [...$finding, 'repository' => $repository['repository'], 'commit' => $repository['commit'], 'stale' => in_array($repository['status'], ['failed', 'deferred'], true)];
             }
         }
         $pages = max(1, (int) ceil(count($findings) / 25));
