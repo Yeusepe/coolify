@@ -47,7 +47,7 @@ def main():
     index = json.loads((ROOT / "index.json").read_text())
     with tempfile.TemporaryDirectory(prefix="source-scan-") as temporary:
         output = pathlib.Path(temporary) / "scan.json"
-        command = [str(ROOT / "opengrep"), "scan", "--config", str(ROOT / "rules.json"), "--json-output", str(output), "--no-rewrite-rule-ids", "--metrics", "off", "--disable-version-check", "--disable-nosem", "--no-git-ignore", "--taint-intrafile", "--jobs", "2", "--timeout", "5", "--timeout-threshold", "3", "--max-memory", "1000", "--max-target-bytes", "1000000", "."]
+        command = [str(ROOT / "opengrep"), "scan", "--config", str(ROOT / "rules.json"), "--json-output", str(output), "--no-rewrite-rule-ids", "--disable-version-check", "--disable-nosem", "--no-git-ignore", "--taint-intrafile", "--jobs", "2", "--timeout", "5", "--timeout-threshold", "3", "--max-memory", "1000", "--max-target-bytes", "1000000", "."]
         try:
             process = subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=300)
             if not output.is_file() or output.stat().st_size > 32000000:
