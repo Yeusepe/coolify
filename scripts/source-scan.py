@@ -161,9 +161,10 @@ def main():
     with tempfile.TemporaryDirectory(prefix="racconify-source-") as temporary:
         os.chmod(temporary, 0o700)
         for target in settings["targets"]:
+            if time.monotonic() + 500 > deadline:
+                results.append({"id": target["id"], "status": "deferred"})
+                continue
             try:
-                if time.monotonic() + 500 > deadline:
-                    raise TimeoutError("Scan budget exhausted")
                 result = scan(target, image, pathlib.Path(temporary), host_keys)
             except Exception:
                 result = {"status": "failed", "error": "Repository fetch or isolated scan failed. Previous findings are retained."}

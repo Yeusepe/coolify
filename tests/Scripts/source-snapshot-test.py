@@ -1,4 +1,7 @@
 import importlib.util
+import contextlib
+import io
+import json
 import os
 import pathlib
 import subprocess
@@ -13,8 +16,18 @@ spec.loader.exec_module(runner)
 
 
 class SourceSnapshotTest(unittest.TestCase):
+    def test_budget_exhaustion_defers_without_attempting_the_repository(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            request = pathlib.Path(temporary) / "request.json"
+            request.write_text(json.dumps({"image": "ghcr.io/yeusepe/coolify@sha256:" + "a" * 64, "targets": [{"id": "later", "repository": "owner/app", "ref": "main"}]}))
+            output = io.StringIO()
+            with patch.object(runner.sys, "argv", ["runner", str(request)]), patch.object(runner, "run", return_value=b""), patch.object(runner, "scan") as scan, patch.object(runner.time, "monotonic", side_effect=[0, 2000]), contextlib.redirect_stdout(output):
+                runner.main()
+            self.assertEqual(json.loads(output.getvalue())["repositories"], [{"id": "later", "status": "deferred"}])
+            scan.assert_not_called()
+            self.assertFalse(request.exists())
+
     def test_files_omitted_by_the_engine_keep_coverage_partial(self):
-        import json
         with tempfile.TemporaryDirectory() as temporary, patch.object(runner, "run", side_effect=[b"", b"", b"a" * 40, json.dumps({"format": 1, "status": "completed", "files_scanned": 1}).encode()]), patch.object(runner, "snapshot", return_value={"snapshot_files": 2, "snapshot_bytes": 30, "skipped_files": 0}), patch.object(runner.shutil, "rmtree"), patch.object(runner.subprocess, "run"):
             result = runner.scan({"repository": "owner/app", "ref": "main"}, "pinned-image", pathlib.Path(temporary), "")
             self.assertEqual(result["status"], "partial")
