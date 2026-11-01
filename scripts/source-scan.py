@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.request
 import uuid
 
@@ -156,10 +157,13 @@ def main():
         if not host_keys:
             raise ValueError("GitHub host keys unavailable")
     results = []
+    deadline = time.monotonic() + 2200
     with tempfile.TemporaryDirectory(prefix="racconify-source-") as temporary:
         os.chmod(temporary, 0o700)
         for target in settings["targets"]:
             try:
+                if time.monotonic() + 500 > deadline:
+                    raise TimeoutError("Scan budget exhausted")
                 result = scan(target, image, pathlib.Path(temporary), host_keys)
             except Exception:
                 result = {"status": "failed", "error": "Repository fetch or isolated scan failed. Previous findings are retained."}
