@@ -130,7 +130,8 @@ def scan(target, image, directory, host_keys):
         result = json.loads(raw)
         if result.get("format") != 1 or result.get("status") not in {"completed", "partial", "failed"}:
             raise ValueError("Invalid scanner result")
-        if coverage["skipped_files"] and result["status"] == "completed":
+        result["unscanned_files"] = max(0, coverage["snapshot_files"] - result.get("files_scanned", 0))
+        if (coverage["skipped_files"] or result["unscanned_files"]) and result["status"] == "completed":
             result["status"] = "partial"
         return {**result, **coverage, "commit": commit}
     finally:

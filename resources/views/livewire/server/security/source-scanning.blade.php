@@ -20,6 +20,7 @@
                         <p class="mt-1 text-xs break-words">{{ $repository['ref_kind'] }}: {{ $repository['ref'] }}</p>
                         @if ($repository['commit'] ?? null)<p class="mt-1 text-xs break-words font-mono">Scanned commit: {{ $repository['commit'] }}</p>@endif
                         @if ($repository['checked_at'] ?? null)<p class="mt-1 text-xs">Results from {{ \Illuminate\Support\Carbon::parse($repository['checked_at'])->diffForHumans() }}. {{ $repository['files_scanned'] ?? 0 }} files checked · {{ $repository['finding_count'] ?? 0 }} candidates · {{ $repository['error_count'] ?? 0 }} scanner errors · {{ $repository['skipped_files'] ?? 0 }} files omitted by limits.</p>@endif
+                        @if ($repository['unscanned_files'] ?? 0)<p class="mt-1 text-xs text-warning">{{ $repository['unscanned_files'] }} selected source files were not analyzed by the engine.</p>@endif
                         @if ($repository['error'] ?? null)<p class="mt-2 text-xs text-warning">{{ $repository['error'] }}</p>@endif
                         @if (($repository['status'] === 'partial') || ($repository['truncated'] ?? false))<p class="mt-2 text-xs text-warning">Coverage is incomplete. Some files, rules or results were omitted. Review repository size, syntax errors and scanner limits.</p>@endif
                         @if (isset($repository['checked_at']) && \Illuminate\Support\Carbon::parse($repository['checked_at'])->lt(now()->subDays(2)))<p class="mt-2 text-xs text-warning">These results are stale. Run a new scan.</p>@endif
