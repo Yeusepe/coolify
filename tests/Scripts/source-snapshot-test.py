@@ -16,6 +16,13 @@ spec.loader.exec_module(runner)
 
 
 class SourceSnapshotTest(unittest.TestCase):
+    def test_scan_memory_reserves_half_of_available_memory_and_refuses_starved_hosts(self):
+        self.assertEqual(runner.memory_limit(1200), 600)
+        self.assertEqual(runner.memory_limit(18000), 2048)
+        self.assertEqual(runner.memory_limit(512), 256)
+        with self.assertRaises(ValueError):
+            runner.memory_limit(511)
+
     def test_budget_exhaustion_defers_without_attempting_the_repository(self):
         with tempfile.TemporaryDirectory() as temporary:
             request = pathlib.Path(temporary) / "request.json"
