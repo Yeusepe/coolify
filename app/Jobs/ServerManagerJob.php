@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\InstanceSettings;
 use App\Models\Server;
 use App\Models\Team;
+use App\Services\SourceScanService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -215,6 +216,10 @@ class ServerManagerJob implements ShouldBeEncrypted, ShouldQueue
 
         if (config('services.cve_now.enabled') && $server->isFunctional() && shouldRunCronNow(sprintf('%d * * * *', ($server->id * 13) % 60), $serverTimezone, 'cve-now-check:'.$server->id, $this->executionTime)) {
             ServerVulnerabilityCheckJob::dispatch($server);
+        }
+
+        if (config('services.source_scanning.enabled') && $server->isFunctional() && shouldRunCronNow(sprintf('%d 3 * * *', ($server->id * 17) % 60), $serverTimezone, 'source-scan:'.$server->id, $this->executionTime) && ! (app(SourceScanService::class)->report($server)['unsupported_host'] ?? false)) {
+            ServerSourceScanJob::dispatch($server);
         }
 
         // Crash recovery is handled by sentinelOutOfSync → ServerCheckJob → CheckAndStartSentinelJob.

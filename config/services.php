@@ -92,4 +92,9 @@ return [
         'enabled' => env('CVE_NOW_ENABLED', false),
     ],
 
+    'source_scanning' => [
+        'enabled' => env('SOURCE_SCANNING_ENABLED', false),
+        'image' => 'ghcr.io/yeusepe/coolify@sha256:6fd6f07a0561aba1543daa33e45dcb75b356cfef5e341f925808eadf7a176452',
+    ],
+
 ];

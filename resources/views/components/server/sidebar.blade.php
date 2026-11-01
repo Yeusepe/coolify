@@ -187,6 +187,7 @@
             'children' => [
                 ['label' => 'Server Patching', 'route' => 'server.security.patches', 'active' => request()->routeIs('server.security.patches'), 'icon' => 'bandage'],
                 ['label' => 'Vulnerabilities', 'route' => 'server.security.vulnerabilities', 'active' => request()->routeIs('server.security.vulnerabilities'), 'icon' => 'shield-alert'],
+                ['label' => 'Source scanning', 'route' => 'server.security.source-scanning', 'active' => request()->routeIs('server.security.source-scanning'), 'icon' => 'code'],
                 ['label' => 'Terminal Access', 'route' => 'server.security.terminal-access', 'active' => request()->routeIs('server.security.terminal-access'), 'icon' => 'browser-terminal', 'navigate' => false],
             ],
         ],
