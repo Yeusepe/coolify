@@ -217,6 +217,10 @@ class ServerManagerJob implements ShouldBeEncrypted, ShouldQueue
             ServerVulnerabilityCheckJob::dispatch($server);
         }
 
+        if (config('services.source_scanning.enabled') && $server->isFunctional() && shouldRunCronNow(sprintf('%d 3 * * *', ($server->id * 17) % 60), $serverTimezone, 'source-scan:'.$server->id, $this->executionTime)) {
+            ServerSourceScanJob::dispatch($server);
+        }
+
         // Crash recovery is handled by sentinelOutOfSync → ServerCheckJob → CheckAndStartSentinelJob.
     }
 

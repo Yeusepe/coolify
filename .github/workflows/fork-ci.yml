@@ -39,6 +39,7 @@ jobs:
       - run: cp .env.testing .env
       - run: node --test tests/Scripts/passkeys.test.js
       - run: bash tests/Scripts/fork-update-test.sh
+      - run: python3 tests/Scripts/source-scanner-test.py && python3 tests/Scripts/source-snapshot-test.py
       - run: npm ci
       - run: npm run build
       - run: >-
@@ -54,6 +55,8 @@ jobs:
           tests/Feature/ServerSettingsAuditTest.php
           tests/Feature/CveNowServiceTest.php
           tests/Feature/CweServiceTest.php
+          tests/Feature/SourceScanServiceTest.php tests/Feature/SourceScanningTest.php
+          app/Services/SourceScanService.php app/Jobs/ServerSourceScanJob.php app/Livewire/Server/Security/SourceScanning.php
           tests/Feature/SoftwareRecommendationServiceTest.php
           tests/TestCase.php
           tests/Feature/SshMultiplexingLockTest.php
@@ -99,6 +102,7 @@ jobs:
           tests/Feature/CweServiceTest.php
           tests/Feature/SoftwareRecommendationServiceTest.php
           tests/Feature/CveNowMonitoringTest.php
+          tests/Feature/SourceScanServiceTest.php tests/Feature/SourceScanningTest.php
       - run: php artisan view:cache
       - run: php artisan view:clear
 
