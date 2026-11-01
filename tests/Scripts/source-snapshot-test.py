@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 
 root = pathlib.Path(__file__).resolve().parents[2]
-spec = importlib.util.spec_from_file_location("source_snapshot", root / "scripts/source-scan.py")
+spec = importlib.util.spec_from_file_location("source_snapshot", root / "resources/scripts/source-scan.py")
 runner = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(runner)
 

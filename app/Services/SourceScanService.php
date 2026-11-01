@@ -92,7 +92,7 @@ class SourceScanService
             $directory = '/tmp/racconify-source-request-'.Str::random(24);
             instant_remote_process(['install -d -m 700 '.escapeshellarg($directory)], $server);
             try {
-                instant_remote_write_file($server, $directory.'/runner.py', file_get_contents(base_path('scripts/source-scan.py')));
+                instant_remote_write_file($server, $directory.'/runner.py', file_get_contents(resource_path('scripts/source-scan.py')));
                 instant_remote_write_file($server, $directory.'/request.json', json_encode(['image' => config('services.source_scanning.image'), 'targets' => $targets], JSON_THROW_ON_ERROR));
                 instant_remote_process(['chmod 600 '.escapeshellarg($directory.'/request.json')], $server);
                 $output = instant_remote_process(['python3 '.escapeshellarg($directory.'/runner.py').' '.escapeshellarg($directory.'/request.json')], $server, timeout: 2400);
