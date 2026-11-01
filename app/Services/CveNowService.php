@@ -218,7 +218,7 @@ class CveNowService
                             continue;
                         }
                         if (! $existing || $match === true) {
-                            $entry = ['id' => $existing['id'] ?? $id, 'title' => $threat['name'] ?? $id, 'modifiedAt' => $threat['updatedAt'] ?? null, 'severity' => ['cvss' => $threat['cvss'] ?? 0], 'affected' => [['ranges' => $ranges ?? []]]];
+                            $entry = ['id' => $existing['id'] ?? $id, 'title' => $threat['name'] ?? $id, 'modifiedAt' => $threat['updatedAt'] ?? null, 'severity' => ['cvss' => $threat['cvss'] ?? 0], 'exploitation' => ['kev' => $existing['known_exploited'] ?? false], 'affected' => [['ranges' => $ranges ?? []]]];
                             $findings[$key] = $this->finding($entry, ['ecosystem' => 'runtime', 'name' => $technology, 'version' => $runtime['version']], $existing['contexts'] ?? [], $match === true ? 'Runtime version range match' : 'Technology advisory. Check vendor applicability');
                             $findings[$key]['url'] = $existing['url'] ?? $intelligence['url'];
                         }

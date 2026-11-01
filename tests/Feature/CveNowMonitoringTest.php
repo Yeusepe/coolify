@@ -118,6 +118,44 @@ it('does not notify again for unchanged high severity matches', function () {
     expect(Cache::has('cve-now:pending:'.$server->uuid))->toBeFalse();
 });
 
+it('preserves positive exploitation signals and alerts when resolving low severity runtime aliases', function (bool $cveExploited, string $stage, bool $expectedExploited) {
+    Storage::fake('local');
+    $server = cveMonitoringServer();
+    Notification::fake();
+    $server->team->discordNotificationSettings()->updateOrCreate([], ['discord_enabled' => true, 'discord_webhook_url' => 'https://discord.com/api/webhooks/test/test', 'server_patch_discord_notifications' => true]);
+    Http::preventStrayRequests();
+    Http::fake([
+        'cve.now/feed*' => Http::response(['items' => [['id' => 'GHSA-abcd-1234-5678']]]),
+        'cve.now/api/v1/entries/GHSA-abcd-1234-5678' => Http::response(['id' => 'GHSA-abcd-1234-5678', 'severity' => ['cvss' => 5.0], 'exploitation' => ['kev' => $cveExploited], 'affected' => [['product' => 'php', 'ranges' => []]]]),
+        'api.enclave.ai/v1/threats' => Http::response(['ok' => true, 'ranAt' => '2026-11-01T12:00:00Z', 'threats' => [[
+            'cveId' => 'CVE-2026-12345', 'aliases' => ['GHSA-abcd-1234-5678'], 'name' => 'PHP issue', 'cvss' => 5.0,
+            'products' => ['PHP'], 'affected' => [], 'stage' => $stage, 'updatedAt' => '2026-11-01T12:00:00Z',
+        ]]]),
+        'raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2026/12xxx/CVE-2026-12345.json' => Http::response([
+            'cveMetadata' => ['cveId' => 'CVE-2026-12345', 'state' => 'PUBLISHED'],
+            'containers' => ['cna' => ['affected' => [['product' => 'PHP', 'versions' => [['status' => 'affected', 'version' => '8.4.0', 'lessThan' => '8.4.27']]]]]],
+        ]),
+        'www.php.net/releases/*' => Http::response(['version' => '8.4.27']),
+    ]);
+    $service = $this->partialMock(CveNowService::class, fn ($mock) => $mock->shouldReceive('collect')->andReturn(['packages' => [], 'runtimes' => [['name' => 'php', 'version' => '8.4.26', 'container' => 'control']], 'containers' => [], 'warnings' => []]));
+
+    (new ServerVulnerabilityCheckJob($server))->handle($service);
+
+    $report = $service->report($server);
+    expect($report['error'])->toBeNull();
+    expect($report['findings'])->toHaveCount(1);
+    expect($report['findings'][0])->toMatchArray(['id' => 'GHSA-abcd-1234-5678', 'kind' => 'Runtime version range match', 'score' => 5.0]);
+    Notification::assertSentTimes(VulnerabilitiesFound::class, $expectedExploited ? 1 : 0);
+    expect($report['findings'][0]['known_exploited'])->toBe($expectedExploited);
+    expect($report['notified'])->toHaveCount($expectedExploited ? 1 : 0);
+    Http::assertSentCount(5);
+})->with([
+    'CVE.now exploited, Enclave unconfirmed' => [true, 'reported', true],
+    'CVE.now exploited, Enclave public exploit' => [true, 'exploit_public', true],
+    'Enclave alone confirms exploitation' => [false, 'exploited', true],
+    'neither source confirms exploitation' => [false, 'reported', false],
+]);
+
 it('keeps uncertain runtime advisories visible without urgent notifications', function () {
     Storage::fake('local');
     $server = cveMonitoringServer();
