@@ -64,6 +64,6 @@ if len(rules) < 100:
     raise ValueError("Expected language rule coverage was not built")
 (OUT / "rules.json").write_text(json.dumps({"rules": rules}, sort_keys=True), encoding="utf-8")
 (OUT / "index.json").write_text(json.dumps(index, sort_keys=True), encoding="utf-8")
-(OUT / "manifest.json").write_text(json.dumps({"engine": "Opengrep 1.33.1", "rules_commit": RULES_COMMIT, "rule_count": len(rules), "languages": sorted(LANGUAGES), "format": 1}), encoding="utf-8")
+(OUT / "manifest.json").write_text(json.dumps({"engine": "Opengrep 1.33.1", "rules_commit": RULES_COMMIT, "rule_count": len(rules), "languages": sorted({language for rule in rules for language in rule["languages"]}), "format": 1}), encoding="utf-8")
 with urllib.request.urlopen("https://raw.githubusercontent.com/opengrep/opengrep/092c80f/LICENSE", timeout=30) as response:
     (OUT / "OPENGREP-LICENSE").write_bytes(response.read())
