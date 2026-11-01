@@ -45,6 +45,9 @@ with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as bundle:
             continue
         for original in data["rules"]:
             rule = dict(original)
+            # Opengrep 1.33.1 rejects this upstream C# lambda pattern during parsing.
+            if rule["id"] == "csharp_crypto_rule-CertificateValidationDisabled":
+                continue
             if not set(rule.get("languages", [])) <= LANGUAGES:
                 continue
             identifier = "gitlab." + re.sub(r"[^A-Za-z0-9_.-]", ".", "/".join(path.parts[1:])) + "." + rule["id"]
