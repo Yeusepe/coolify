@@ -325,6 +325,27 @@ it('merges overlapping runtime advisories and ignores unrelated product names', 
     Http::assertNotSent(fn ($request) => str_contains($request->url(), 'CVE-2026-12346'));
 })->with(['same identifier' => ['CVE-2026-12345'], 'GHSA alias' => ['GHSA-abcd-1234-5678']]);
 
+it('resolves uncertain runtime aliases using authoritative ranges discovered through Enclave', function (string $version, int $count) {
+    Http::preventStrayRequests();
+    Http::fake([
+        'cve.now/feed*' => Http::response(['items' => [['id' => 'GHSA-abcd-1234-5678']]]),
+        'cve.now/api/v1/entries/GHSA-abcd-1234-5678' => Http::response(['id' => 'GHSA-abcd-1234-5678', 'affected' => [['product' => 'php', 'ranges' => []]]]),
+        'api.enclave.ai/v1/threats' => Http::response(['ok' => true, 'ranAt' => '2026-11-01T12:00:00Z', 'threats' => [enclaveCveThreat(['aliases' => ['GHSA-abcd-1234-5678']])]]),
+        'raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2026/12xxx/CVE-2026-12345.json' => Http::response([
+            'cveMetadata' => ['cveId' => 'CVE-2026-12345', 'state' => 'PUBLISHED'],
+            'containers' => ['cna' => ['affected' => [['product' => 'PHP', 'versions' => [['status' => 'affected', 'version' => '8.4.0', 'lessThan' => '8.4.27']]]]]],
+        ]),
+    ]);
+
+    $report = app(CveNowService::class)->check(['runtimes' => [['name' => 'php', 'version' => $version, 'container' => 'control'], ['name' => 'php', 'version' => $version, 'container' => 'api']]]);
+
+    expect($report['findings'])->toHaveCount($count);
+    if ($count) {
+        expect($report['findings'][0])->toMatchArray(['id' => 'GHSA-abcd-1234-5678', 'kind' => 'Runtime version range match', 'fixed' => ['8.4.27'], 'contexts' => ['control', 'api'], 'url' => 'https://cve.now/GHSA-abcd-1234-5678', 'known_exploited' => true]);
+    }
+    Http::assertSentCount(4);
+})->with(['confirmed affected' => ['8.4.26', 1], 'confirmed patched' => ['8.4.27', 0]]);
+
 it('retains CVE.now findings with a visible warning when Enclave fails validation or availability', function (array $body, int $status) {
     Http::preventStrayRequests();
     Http::fake([
