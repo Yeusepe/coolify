@@ -155,10 +155,81 @@ class CveNowService
                 }
             }
         }
+        $enclaveUpdatedAt = null;
+        try {
+            $feed = $this->enclaveFeed();
+            $findings = $this->enclaveFindings($feed['threats'], $inventory['runtimes'] ?? [], $technologyNames, $findings);
+            $enclaveUpdatedAt = $feed['ranAt'];
+        } catch (\Throwable) {
+            $inventory['warnings'][] = 'Enclave threat intelligence is unavailable. CVE.now results are retained; exploitation signals may be incomplete.';
+        }
         $findings = array_values($findings);
         usort($findings, fn ($a, $b) => $b['score'] <=> $a['score']);
 
-        return ['checked_at' => now()->toIso8601String(), 'packages_checked' => count($packages), 'containers' => $inventory['containers'] ?? [], 'runtimes' => $inventory['runtimes'] ?? [], 'warnings' => $inventory['warnings'] ?? [], 'findings' => $findings, 'error' => null];
+        return ['checked_at' => now()->toIso8601String(), 'packages_checked' => count($packages), 'containers' => $inventory['containers'] ?? [], 'runtimes' => $inventory['runtimes'] ?? [], 'warnings' => $inventory['warnings'] ?? [], 'findings' => $findings, 'enclave_updated_at' => $enclaveUpdatedAt, 'error' => null];
+    }
+
+    private function enclaveFeed(): array
+    {
+        return Cache::remember('enclave:threat-feed:v1', 3600, function () {
+            $response = Http::acceptJson()->connectTimeout(5)->timeout(20)->withOptions(['allow_redirects' => false])->get('https://api.enclave.ai/v1/threats');
+            $response->throw();
+            $feed = $response->json();
+            if ($response->redirect() || ! is_array($feed) || ($feed['ok'] ?? null) !== true || ! is_string($feed['ranAt'] ?? null) || strtotime($feed['ranAt']) === false || ! is_array($feed['threats'] ?? null) || ! array_is_list($feed['threats']) || count($feed['threats']) > 10000) {
+                throw new RuntimeException('Enclave returned an incomplete threat feed.');
+            }
+            foreach ($feed['threats'] as $threat) {
+                if (! is_array($threat) || ! is_string($threat['cveId'] ?? null) || ! preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]{2,100}$/', $threat['cveId']) || ! in_array($threat['stage'] ?? null, ['no_exploit', 'exploit_public', 'reported', 'exploited'], true) || ! is_array($threat['products'] ?? null) || ! is_array($threat['affected'] ?? null) || ! is_array($threat['aliases'] ?? null)) {
+                    throw new RuntimeException('Enclave returned an invalid threat.');
+                }
+            }
+
+            return $feed;
+        });
+    }
+
+    private function enclaveFindings(array $threats, array $runtimes, array $technologyNames, array $findings): array
+    {
+        foreach ($threats as $threat) {
+            $id = $threat['cveId'];
+            $intelligence = ['url' => 'https://app.enclave.ai/threat-feed/'.rawurlencode($id), 'stage' => $threat['stage'], 'ransomware' => ($threat['knownRansomware'] ?? false) === true];
+            $products = array_map('strtolower', [...$threat['products'], ...array_column($threat['affected'], 'product')]);
+            foreach ($technologyNames as $technology => $names) {
+                $installed = array_filter($runtimes, fn ($runtime) => $runtime['name'] === $technology);
+                if (! $installed || ! array_intersect($names, $products)) {
+                    continue;
+                }
+                $ranges = $this->primaryRuntimeRanges($id, $names);
+                foreach ($installed as $runtime) {
+                    $key = $id.'|runtime:'.$technology.'@'.$runtime['version'];
+                    foreach ($threat['aliases'] as $alias) {
+                        $aliasKey = $alias.'|runtime:'.$technology.'@'.$runtime['version'];
+                        if (isset($findings[$aliasKey])) {
+                            $key = $aliasKey;
+                            break;
+                        }
+                    }
+                    if (! isset($findings[$key])) {
+                        $match = $ranges === null ? null : $this->inRanges($runtime['version'], $ranges);
+                        if ($match === false) {
+                            continue;
+                        }
+                        $entry = ['id' => $id, 'title' => $threat['name'] ?? $id, 'modifiedAt' => $threat['updatedAt'] ?? null, 'severity' => ['cvss' => $threat['cvss'] ?? 0], 'affected' => [['ranges' => $ranges ?? []]]];
+                        $findings[$key] = $this->finding($entry, ['ecosystem' => 'runtime', 'name' => $technology, 'version' => $runtime['version']], [], $match === true ? 'Runtime version range match' : 'Technology advisory. Check vendor applicability');
+                        $findings[$key]['url'] = $intelligence['url'];
+                    }
+                    $findings[$key]['contexts'] = array_values(array_unique([...$findings[$key]['contexts'], $runtime['container']]));
+                }
+            }
+            foreach ($findings as $key => $finding) {
+                if ($finding['id'] === $id || in_array($finding['id'], $threat['aliases'], true)) {
+                    $findings[$key]['enclave'] = $intelligence;
+                    $findings[$key]['known_exploited'] = $finding['known_exploited'] || $threat['stage'] === 'exploited';
+                }
+            }
+        }
+
+        return $findings;
     }
 
     private function primaryRuntimeRanges(string $id, array $products): ?array

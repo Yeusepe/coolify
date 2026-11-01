@@ -4,11 +4,12 @@
     <div class="server-settings-workspace application-settings-workspace mt-4 grid w-full min-w-0 gap-8 lg:mt-0 xl:grid-cols-[210px_minmax(0,1fr)]">
         <x-server.sidebar :server="$server" activeMenu="security" />
         <div class="application-settings-form flex min-w-0 flex-col gap-6">
-            <x-application.settings-section title="Vulnerabilities" helper="Installed software checked against CVE.now.">
+            <x-application.settings-section title="Vulnerabilities" helper="Installed software checked against CVE.now and Enclave threat intelligence.">
                 <x-slot:actions><x-forms.button wire:click="refreshReport" :disabled="$pending || !$enabled">{{ $pending ? 'Check in progress' : 'Check now' }}</x-forms.button></x-slot:actions>
                 @error('monitoring')<x-callout type="warning" :title="$message" />@enderror
                 @if (!$enabled)<x-callout type="warning" title="Monitoring is disabled for this installation" />@endif
-                <p class="text-sm text-neutral-600 dark:text-fg-dim">Automatic checks run hourly. New high and critical version matches use your existing server patch notification channels. Advisories with uncertain version applicability stay on this page without triggering alerts. Names and versions are sent to CVE.now. Credentials, source code and lockfiles are not uploaded.</p>
+                <p class="text-sm text-neutral-600 dark:text-fg-dim">Automatic checks run hourly. New high and critical version matches use your existing server patch notification channels. Advisories with uncertain version applicability stay on this page without triggering alerts. Names and versions are sent to CVE.now. Enclave's public feed is matched locally without uploading inventory. Credentials, source code and lockfiles are not uploaded.</p>
+                @if ($report['enclave_updated_at'] ?? null)<p class="mt-3 text-sm text-neutral-600 dark:text-fg-dim">Enclave feed refreshed {{ \Illuminate\Support\Carbon::parse($report['enclave_updated_at'])->diffForHumans() }}.</p>@endif
                 @if (isset($report['inventory_checked_at']))<p class="mt-3 text-sm text-neutral-600 dark:text-fg-dim">Software inventory checked {{ \Illuminate\Support\Carbon::parse($report['inventory_checked_at'])->diffForHumans() }}.</p>@endif
                 @if ($report['error'] ?? null)<x-callout type="danger" title="Check could not finish">{{ $report['error'] }} Last successful results remain below.</x-callout>@endif
                 @if (isset($report['checked_at']))
@@ -64,6 +65,7 @@
                             <p class="mt-1 text-sm">{{ $finding['title'] }}</p>
                             <p class="mt-2 break-words font-mono text-xs">{{ $finding['package'] }} {{ $finding['version'] }} · {{ implode(', ', $finding['contexts']) }}</p>
                             <p class="mt-1 text-xs text-neutral-600 dark:text-fg-dim">{{ $finding['kind'] }}. {{ $finding['fixed'] ? 'Advisory fix versions: '.implode(', ', $finding['fixed']) : 'No fix version supplied by this source.' }}</p>
+                            @if (isset($finding['enclave']))<p class="mt-2 text-xs"><a class="underline" href="{{ $finding['enclave']['url'] }}" target="_blank" rel="noopener noreferrer">Enclave</a>: {{ ['no_exploit' => 'No public exploit reported', 'exploit_public' => 'Public exploit available', 'reported' => 'Exploitation reported, unconfirmed', 'exploited' => 'Exploited in the wild'][$finding['enclave']['stage']] ?? 'Review threat intelligence' }}{{ $finding['enclave']['ransomware'] ? '. Ransomware use reported.' : '.' }}</p>@endif
                         </div>
                     @empty
                         <x-empty size="sm" title="No matches in the checked inventory" description="This does not certify that the server is vulnerability-free. Coverage depends on inventory and published version data." icon-name="check-circle" />
@@ -101,7 +103,7 @@
                 </form>
             </x-application.settings-section>
             <x-callout type="info" title="Coverage and source">
-                Checks cover discovered npm, Composer and NuGet packages, plus recent critical PHP, Node.js, Docker, PostgreSQL, Redis, Nginx and OpenSSL runtime advisories. Vendor release recommendations also cover detected Bun, ASP.NET Core, MongoDB, proxies and other supported software. A newer release is not proof of a vulnerability; an older version may include distribution backports. Unidentified binaries and compiled dependencies are not fully covered. Use <a class="underline" href="{{ route('server.security.patches', ['server_uuid' => $server->uuid]) }}" {{ wireNavigate() }}>Server patching</a> for operating system updates. CVE.now merges advisory sources; its model-written summaries are not used to decide matches. <a class="underline" href="https://cve.now/" target="_blank" rel="noopener noreferrer">CVE.now</a> summaries are CC-BY 4.0. Uses NVD data; not endorsed by NVD.
+                Checks cover discovered npm, Composer and NuGet packages, plus recent critical PHP, Node.js, Docker, PostgreSQL, Redis, Nginx and OpenSSL runtime advisories. <a class="underline" href="https://app.enclave.ai/threat-feed" target="_blank" rel="noopener noreferrer">Enclave Threat Feed</a> adds exploitation signals to matching advisory IDs and discovers additional advisories for these runtimes. Additional runtime version ranges and fix versions are checked against CVE.org records; unverified ranges remain review-only. Vendor release recommendations also cover detected Bun, ASP.NET Core, MongoDB, proxies and other supported software. A newer release is not proof of a vulnerability; an older version may include distribution backports. Unidentified binaries and compiled dependencies are not fully covered. Use <a class="underline" href="{{ route('server.security.patches', ['server_uuid' => $server->uuid]) }}" {{ wireNavigate() }}>Server patching</a> for operating system updates. CVE.now merges advisory sources; its model-written summaries are not used to decide matches. <a class="underline" href="https://cve.now/" target="_blank" rel="noopener noreferrer">CVE.now</a> summaries are CC-BY 4.0. Uses NVD data; not endorsed by NVD.
                 @foreach ($report['warnings'] ?? [] as $warning)<p>{{ $warning }}</p>@endforeach
             </x-callout>
         </div>
