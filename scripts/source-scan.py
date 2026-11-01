@@ -16,6 +16,12 @@ EXCLUDED = {"node_modules", "vendor", ".git", "dist", "build", ".next", "coverag
 LIMIT = 200_000_000
 
 
+def memory_limit(available_mb):
+    if available_mb < 512:
+        raise ValueError("Insufficient available memory for an isolated scan")
+    return min(2048, available_mb // 2)
+
+
 def run(command, env=None, timeout=120, input=None):
     return subprocess.run(command, input=input, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                           env=env, timeout=timeout, check=True).stdout
@@ -121,10 +127,13 @@ def scan(target, image, directory, host_keys):
         (work / item).unlink(missing_ok=True)
     shutil.rmtree(work / "repository.git")
     name = "racconify-source-" + uuid.uuid4().hex
+    available = re.search(r"^MemAvailable:\s+(\d+) kB$", pathlib.Path("/proc/meminfo").read_text(), re.MULTILINE)
+    memory = memory_limit(int(available.group(1)) // 1024) if available else memory_limit(0)
+    cpus = 1 if memory < 1024 else 2
     try:
         raw = run(["docker", "run", "--rm", "--name", name, "--network", "none", "--read-only",
                    "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--pids-limit", "128",
-                   "--memory", "2g", "--cpus", "2", "--tmpfs", "/tmp:rw,exec,nosuid,size=512m",
+                   "--memory", f"{memory}m", "--cpus", str(cpus), "--tmpfs", f"/tmp:rw,exec,nosuid,size={min(512, memory // 2)}m",
                    "--mount", f"type=bind,src={source},dst=/src,readonly", image], timeout=360)
         if len(raw) > 8_000_000:
             raise ValueError("Oversized scanner result")
@@ -134,7 +143,7 @@ def scan(target, image, directory, host_keys):
         result["unscanned_files"] = max(0, coverage["snapshot_files"] - result.get("files_scanned", 0))
         if (coverage["skipped_files"] or result["unscanned_files"]) and result["status"] == "completed":
             result["status"] = "partial"
-        return {**result, **coverage, "commit": commit}
+        return {**result, **coverage, "commit": commit, "memory_limit_mb": memory, "cpu_limit": cpus}
     finally:
         subprocess.run(["docker", "rm", "-f", name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15)
 
