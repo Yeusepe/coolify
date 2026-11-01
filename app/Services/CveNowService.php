@@ -209,14 +209,19 @@ class CveNowService
                             break;
                         }
                     }
-                    if (! isset($findings[$key])) {
+                    $existing = $findings[$key] ?? null;
+                    if (! $existing || $existing['kind'] === 'Technology advisory. Check vendor applicability') {
                         $match = $ranges === null ? null : $this->inRanges($runtime['version'], $ranges);
                         if ($match === false) {
+                            unset($findings[$key]);
+
                             continue;
                         }
-                        $entry = ['id' => $id, 'title' => $threat['name'] ?? $id, 'modifiedAt' => $threat['updatedAt'] ?? null, 'severity' => ['cvss' => $threat['cvss'] ?? 0], 'affected' => [['ranges' => $ranges ?? []]]];
-                        $findings[$key] = $this->finding($entry, ['ecosystem' => 'runtime', 'name' => $technology, 'version' => $runtime['version']], [], $match === true ? 'Runtime version range match' : 'Technology advisory. Check vendor applicability');
-                        $findings[$key]['url'] = $intelligence['url'];
+                        if (! $existing || $match === true) {
+                            $entry = ['id' => $existing['id'] ?? $id, 'title' => $threat['name'] ?? $id, 'modifiedAt' => $threat['updatedAt'] ?? null, 'severity' => ['cvss' => $threat['cvss'] ?? 0], 'affected' => [['ranges' => $ranges ?? []]]];
+                            $findings[$key] = $this->finding($entry, ['ecosystem' => 'runtime', 'name' => $technology, 'version' => $runtime['version']], $existing['contexts'] ?? [], $match === true ? 'Runtime version range match' : 'Technology advisory. Check vendor applicability');
+                            $findings[$key]['url'] = $existing['url'] ?? $intelligence['url'];
+                        }
                     }
                     $findings[$key]['contexts'] = array_values(array_unique([...$findings[$key]['contexts'], $runtime['container']]));
                 }
