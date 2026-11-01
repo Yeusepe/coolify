@@ -289,7 +289,7 @@ it('discovers runtime threats absent from CVE.now and uses primary version bound
 
     expect($report['findings'])->toHaveCount($count);
     if ($count) {
-        expect($report['findings'][0])->toMatchArray(['kind' => 'Runtime version range match', 'fixed' => ['8.4.27'], 'contexts' => ['control', 'api'], 'url' => 'https://app.enclave.ai/threat-feed/CVE-2026-12345', 'known_exploited' => true]);
+        expect($report['findings'][0])->toMatchArray(['kind' => 'Runtime version range match', 'fixed' => ['8.4.27'], 'contexts' => ['control', 'api'], 'url' => 'https://app.enclave.ai/threat-feed/CVE-2026-12345', 'known_exploited' => true, 'advisory_modified_at' => '2026-11-01T12:00:00Z']);
     }
     Http::assertSentCount(3);
 })->with(['affected' => ['8.4.26', 1], 'fixed boundary' => ['8.4.27', 0], 'new branch' => ['8.5.12', 0]]);
@@ -309,21 +309,21 @@ it('keeps Enclave runtime threats review-only when primary boundaries cannot be 
     Http::assertSentCount(3);
 });
 
-it('merges overlapping runtime advisories and ignores unrelated product names', function () {
+it('merges overlapping runtime advisories and ignores unrelated product names', function (string $id) {
     Http::preventStrayRequests();
     Http::fake([
-        'cve.now/feed*' => Http::response(['items' => [['id' => 'CVE-2026-12345']]]),
-        'cve.now/api/v1/entries/CVE-2026-12345' => Http::response(['id' => 'CVE-2026-12345', 'affected' => [['product' => 'php', 'ranges' => [['introduced' => '8.4.0', 'fixed' => '8.4.27']]]]]),
-        'api.enclave.ai/v1/threats' => Http::response(['ok' => true, 'ranAt' => '2026-11-01T12:00:00Z', 'threats' => [enclaveCveThreat(), enclaveCveThreat(['cveId' => 'CVE-2026-12346', 'products' => ['YouPHPTube'], 'affected' => [['product' => 'YouPHPTube']]])]]),
+        'cve.now/feed*' => Http::response(['items' => [['id' => $id]]]),
+        'cve.now/api/v1/entries/'.$id => Http::response(['id' => $id, 'affected' => [['product' => 'php', 'ranges' => [['introduced' => '8.4.0', 'fixed' => '8.4.27']]]]]),
+        'api.enclave.ai/v1/threats' => Http::response(['ok' => true, 'ranAt' => '2026-11-01T12:00:00Z', 'threats' => [enclaveCveThreat(['aliases' => ['GHSA-abcd-1234-5678']]), enclaveCveThreat(['cveId' => 'CVE-2026-12346', 'products' => ['YouPHPTube'], 'affected' => [['product' => 'YouPHPTube']]])]]),
         'raw.githubusercontent.com/CVEProject/cvelistV5/*' => Http::response([], 503),
     ]);
 
     $report = app(CveNowService::class)->check(['runtimes' => [['name' => 'php', 'version' => '8.4.26', 'container' => 'control']]]);
 
     expect($report['findings'])->toHaveCount(1);
-    expect($report['findings'][0])->toMatchArray(['id' => 'CVE-2026-12345', 'kind' => 'Runtime version range match', 'fixed' => ['8.4.27'], 'known_exploited' => true, 'url' => 'https://cve.now/CVE-2026-12345']);
+    expect($report['findings'][0])->toMatchArray(['id' => $id, 'kind' => 'Runtime version range match', 'fixed' => ['8.4.27'], 'known_exploited' => true, 'url' => 'https://cve.now/'.$id]);
     Http::assertNotSent(fn ($request) => str_contains($request->url(), 'CVE-2026-12346'));
-});
+})->with(['same identifier' => ['CVE-2026-12345'], 'GHSA alias' => ['GHSA-abcd-1234-5678']]);
 
 it('retains CVE.now findings with a visible warning when Enclave fails validation or availability', function (array $body, int $status) {
     Http::preventStrayRequests();

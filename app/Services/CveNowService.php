@@ -202,12 +202,19 @@ class CveNowService
                 $ranges = $this->primaryRuntimeRanges($id, $names);
                 foreach ($installed as $runtime) {
                     $key = $id.'|runtime:'.$technology.'@'.$runtime['version'];
+                    foreach ($threat['aliases'] as $alias) {
+                        $aliasKey = $alias.'|runtime:'.$technology.'@'.$runtime['version'];
+                        if (isset($findings[$aliasKey])) {
+                            $key = $aliasKey;
+                            break;
+                        }
+                    }
                     if (! isset($findings[$key])) {
                         $match = $ranges === null ? null : $this->inRanges($runtime['version'], $ranges);
                         if ($match === false) {
                             continue;
                         }
-                        $entry = ['id' => $id, 'title' => $threat['name'] ?? $id, 'severity' => ['cvss' => $threat['cvss'] ?? 0], 'affected' => [['ranges' => $ranges ?? []]]];
+                        $entry = ['id' => $id, 'title' => $threat['name'] ?? $id, 'modifiedAt' => $threat['updatedAt'] ?? null, 'severity' => ['cvss' => $threat['cvss'] ?? 0], 'affected' => [['ranges' => $ranges ?? []]]];
                         $findings[$key] = $this->finding($entry, ['ecosystem' => 'runtime', 'name' => $technology, 'version' => $runtime['version']], [], $match === true ? 'Runtime version range match' : 'Technology advisory. Check vendor applicability');
                         $findings[$key]['url'] = $intelligence['url'];
                     }
