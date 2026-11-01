@@ -66,6 +66,7 @@
                             <p class="mt-2 break-words font-mono text-xs">{{ $finding['package'] }} {{ $finding['version'] }} · {{ implode(', ', $finding['contexts']) }}</p>
                             <p class="mt-1 text-xs text-neutral-600 dark:text-fg-dim">{{ $finding['kind'] }}. {{ $finding['fixed'] ? 'Advisory fix versions: '.implode(', ', $finding['fixed']) : 'No fix version supplied by this source.' }}</p>
                             @if (isset($finding['enclave']))<p class="mt-2 text-xs"><a class="underline" href="{{ $finding['enclave']['url'] }}" target="_blank" rel="noopener noreferrer">Enclave</a>: {{ ['no_exploit' => 'No public exploit reported', 'exploit_public' => 'Public exploit available', 'reported' => 'Exploitation reported, unconfirmed', 'exploited' => 'Exploited in the wild'][$finding['enclave']['stage']] ?? 'Review threat intelligence' }}{{ $finding['enclave']['ransomware'] ? '. Ransomware use reported.' : '.' }}</p>@endif
+                            @if (!empty($finding['cwes']))<div class="mt-2 flex flex-wrap gap-2 text-xs" aria-label="CWE weakness classifications">@foreach ($finding['cwes'] as $cwe)<a class="underline" href="{{ $cwe['url'] }}" target="_blank" rel="noopener noreferrer">{{ $cwe['id'] }}{{ $cwe['name'] ? ': '.$cwe['name'] : '' }}</a>@endforeach</div>@endif
                         </div>
                     @empty
                         <x-empty size="sm" title="No matches in the checked inventory" description="This does not certify that the server is vulnerability-free. Coverage depends on inventory and published version data." icon-name="check-circle" />
@@ -84,6 +85,7 @@
                             <p class="mt-2 text-xs">{{ implode(', ', $finding['contexts']) }}</p>
                             <p class="mt-2 text-xs">{{ $finding['review']['reason'] }}</p>
                             <a class="mt-2 inline-block text-xs underline" href="{{ $finding['review']['source'] }}" target="_blank" rel="noopener noreferrer">Verification source</a>
+                            @if (!empty($finding['cwes']))<div class="mt-2 flex flex-wrap gap-2 text-xs" aria-label="CWE weakness classifications">@foreach ($finding['cwes'] as $cwe)<a class="underline" href="{{ $cwe['url'] }}" target="_blank" rel="noopener noreferrer">{{ $cwe['id'] }}{{ $cwe['name'] ? ': '.$cwe['name'] : '' }}</a>@endforeach</div>@endif
                         </details>
                     @endforeach
                 </x-application.settings-section>
@@ -104,6 +106,7 @@
             </x-application.settings-section>
             <x-callout type="info" title="Coverage and source">
                 Checks cover discovered npm, Composer and NuGet packages, plus recent critical PHP, Node.js, Docker, PostgreSQL, Redis, Nginx and OpenSSL runtime advisories. <a class="underline" href="https://app.enclave.ai/threat-feed" target="_blank" rel="noopener noreferrer">Enclave Threat Feed</a> adds exploitation signals to matching advisory IDs and discovers additional advisories for these runtimes. Additional runtime version ranges and fix versions are checked against CVE.org records; unverified ranges remain review-only. Vendor release recommendations also cover detected Bun, ASP.NET Core, MongoDB, proxies and other supported software. A newer release is not proof of a vulnerability; an older version may include distribution backports. Unidentified binaries and compiled dependencies are not fully covered. Use <a class="underline" href="{{ route('server.security.patches', ['server_uuid' => $server->uuid]) }}" {{ wireNavigate() }}>Server patching</a> for operating system updates. CVE.now merges advisory sources; its model-written summaries are not used to decide matches. <a class="underline" href="https://cve.now/" target="_blank" rel="noopener noreferrer">CVE.now</a> summaries are CC-BY 4.0. Uses NVD data; not endorsed by NVD.
+                <p class="mt-2"><a class="underline" href="https://cwe.mitre.org/" target="_blank" rel="noopener noreferrer">CWE</a> labels describe weakness types mapped in published CVE records. They do not prove that installed software is affected and do not change alerts. Missing labels do not mean no weakness exists. Names are cached from MITRE's public API; no server inventory is sent to MITRE. CWE™ content: Copyright &copy; 2006–2026 The MITRE Corporation. <a class="underline" href="{{ asset('cwe-terms.txt') }}" target="_blank" rel="noopener noreferrer">CWE terms of use</a>.</p>
                 @foreach ($report['warnings'] ?? [] as $warning)<p>{{ $warning }}</p>@endforeach
             </x-callout>
         </div>

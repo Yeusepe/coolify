@@ -192,7 +192,7 @@ class CveNowService
     {
         foreach ($threats as $threat) {
             $id = $threat['cveId'];
-            $intelligence = ['url' => 'https://app.enclave.ai/threat-feed/'.rawurlencode($id), 'stage' => $threat['stage'], 'ransomware' => ($threat['knownRansomware'] ?? false) === true];
+            $intelligence = ['url' => 'https://app.enclave.ai/threat-feed/'.rawurlencode($id), 'id' => $id, 'stage' => $threat['stage'], 'ransomware' => ($threat['knownRansomware'] ?? false) === true];
             $products = array_map('strtolower', [...$threat['products'], ...array_column($threat['affected'], 'product')]);
             foreach ($technologyNames as $technology => $names) {
                 $installed = array_filter($runtimes, fn ($runtime) => $runtime['name'] === $technology);
@@ -450,7 +450,9 @@ class CveNowService
         $fixed = array_values(array_unique($fixed));
         sort($fixed);
 
-        return ['id' => $id, 'title' => mb_substr($entry['title'] ?? $entry['originalDescription'] ?? $id, 0, 500), 'score' => (float) ($entry['severity']['cvss'] ?? 0), 'known_exploited' => (bool) ($entry['exploitation']['kev'] ?? false), 'package' => $package['name'], 'version' => $package['version'], 'ecosystem' => $package['ecosystem'], 'contexts' => $contexts, 'kind' => $kind, 'fixed' => $fixed, 'advisory_modified_at' => $entry['modifiedAt'] ?? null, 'url' => 'https://cve.now/'.rawurlencode($id)];
+        $cveIds = array_values(array_unique(array_filter([$id, ...(is_array($entry['aliases'] ?? null) ? $entry['aliases'] : [])], fn ($alias) => is_string($alias) && preg_match('/^CVE-\d{4}-\d{4,}$/', $alias))));
+
+        return ['id' => $id, 'title' => mb_substr($entry['title'] ?? $entry['originalDescription'] ?? $id, 0, 500), 'score' => (float) ($entry['severity']['cvss'] ?? 0), 'known_exploited' => (bool) ($entry['exploitation']['kev'] ?? false), 'package' => $package['name'], 'version' => $package['version'], 'ecosystem' => $package['ecosystem'], 'contexts' => $contexts, 'kind' => $kind, 'fixed' => $fixed, 'advisory_modified_at' => $entry['modifiedAt'] ?? null, 'cve_ids' => $cveIds, 'url' => 'https://cve.now/'.rawurlencode($id)];
     }
 
     public function parsePackages(string $text): array

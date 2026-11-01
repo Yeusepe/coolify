@@ -53,6 +53,7 @@ jobs:
           tests/Unit/ProductionImageWorkflowTest.php
           tests/Feature/ServerSettingsAuditTest.php
           tests/Feature/CveNowServiceTest.php
+          tests/Feature/CweServiceTest.php
           tests/Feature/SoftwareRecommendationServiceTest.php
           tests/TestCase.php
           tests/Feature/SshMultiplexingLockTest.php
@@ -95,6 +96,7 @@ jobs:
           tests/Feature/SshMultiplexingLockTest.php
           tests/Feature/ServerSettingsAuditTest.php
           tests/Feature/CveNowServiceTest.php
+          tests/Feature/CweServiceTest.php
           tests/Feature/SoftwareRecommendationServiceTest.php
           tests/Feature/CveNowMonitoringTest.php
       - run: php artisan view:cache
