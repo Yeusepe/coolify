@@ -35,6 +35,7 @@ it('matches installed package versions without exporting container settings', fu
     Http::preventStrayRequests();
     Http::fake(['cve.now/stack*' => Http::response(['packages' => 1, 'entries' => [[
         'id' => 'CVE-2026-12345', 'title' => '<script>untrusted</script>', 'severity' => ['cvss' => 9.1],
+        'aliases' => ['CVE-2026-12346', 'CVE-2026-12345', '../../secrets', ['CVE-2026-12347']],
         'matched' => ['ecosystem' => 'npm', 'name' => 'example', 'version' => '1.0.0'],
         'affected' => [['ecosystem' => 'npm', 'package' => 'example', 'ranges' => [['introduced' => '0', 'fixed' => '1.0.1']]]],
     ]]])]);
@@ -45,6 +46,7 @@ it('matches installed package versions without exporting container settings', fu
     expect($report['findings'])->toHaveCount(1)
         ->and($report['findings'][0]['fixed'])->toBe(['1.0.1'])
         ->and($report['findings'][0]['contexts'])->toBe(['api'])
+        ->and($report['findings'][0]['cve_ids'])->toBe(['CVE-2026-12345', 'CVE-2026-12346'])
         ->and($report['findings'][0]['url'])->toBe('https://cve.now/CVE-2026-12345');
     Http::assertSent(fn ($request) => $request->url() === 'https://cve.now/stack?p=npm%3Aexample%401.0.0&format=json');
 });
@@ -264,7 +266,7 @@ it('enriches matching advisory IDs and aliases without uploading inventory or du
     $service->check($inventory);
 
     expect($report['findings'])->toHaveCount(1);
-    expect($report['findings'][0])->toMatchArray(['id' => $id, 'known_exploited' => $exploited, 'score' => 5.0, 'enclave' => ['url' => 'https://app.enclave.ai/threat-feed/CVE-2026-12345', 'stage' => $stage, 'ransomware' => true]]);
+    expect($report['findings'][0])->toMatchArray(['id' => $id, 'known_exploited' => $exploited, 'score' => 5.0, 'enclave' => ['url' => 'https://app.enclave.ai/threat-feed/CVE-2026-12345', 'id' => 'CVE-2026-12345', 'stage' => $stage, 'ransomware' => true]]);
     expect($report['enclave_updated_at'])->toBe('2026-11-01T12:00:00Z');
     Http::assertSent(fn ($request) => $request->url() === 'https://api.enclave.ai/v1/threats' && $request->method() === 'GET' && $request->data() === []);
     Http::assertSentCount(2);

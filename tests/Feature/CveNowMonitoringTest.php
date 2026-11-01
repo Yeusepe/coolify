@@ -13,6 +13,7 @@ use App\Models\Team;
 use App\Models\User;
 use App\Notifications\Server\VulnerabilitiesFound;
 use App\Services\CveNowService;
+use App\Services\CweService;
 use App\Services\SoftwareRecommendationService;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -25,6 +26,52 @@ use Illuminate\Support\Sleep;
 use Livewire\Livewire;
 
 uses(RefreshDatabase::class);
+
+it('shows escaped CWE labels for active and reviewed advisories', function () {
+    Storage::fake('local');
+    $server = cveMonitoringServer();
+    $finding = ['id' => 'CVE-2026-12345', 'title' => 'Example advisory', 'score' => 5.0, 'package' => 'example', 'version' => '1.0.0', 'ecosystem' => 'npm', 'contexts' => ['API'], 'kind' => 'Package version match', 'fixed' => [], 'url' => 'https://cve.now/CVE-2026-12345', 'cwes' => [['id' => 'CWE-79', 'name' => '<script>active()</script>', 'url' => 'https://cwe.mitre.org/data/definitions/79.html']]];
+    app(CveNowService::class)->saveReport($server, ['checked_at' => now()->toIso8601String(), 'packages_checked' => 1, 'containers' => [], 'runtimes' => [], 'findings' => [$finding], 'reviewed_findings' => [[...$finding,
+        'cwes' => [['id' => 'CWE-89', 'name' => '<script>reviewed()</script>', 'url' => 'https://cwe.mitre.org/data/definitions/89.html']],
+        'review' => ['fingerprint' => str_repeat('a', 64), 'status' => 'Not affected', 'reason' => 'Vendor review', 'source' => 'https://example.com/review'],
+    ]]]);
+
+    Livewire::test(Vulnerabilities::class, ['server_uuid' => $server->uuid])
+        ->assertSee('CWE-79')->assertSee('CWE-89')->assertSee('CWE terms of use')
+        ->assertSee('&lt;script&gt;active()&lt;/script&gt;', escape: false)
+        ->assertSee('&lt;script&gt;reviewed()&lt;/script&gt;', escape: false)
+        ->assertDontSee('<script>active()</script>', escape: false)
+        ->assertDontSee('<script>reviewed()</script>', escape: false);
+});
+
+it('saves the core report and notification markers before optional CWE enrichment', function () {
+    Storage::fake('local');
+    $server = cveMonitoringServer();
+    Notification::fake();
+    $server->team->discordNotificationSettings()->updateOrCreate([], ['discord_enabled' => true, 'discord_webhook_url' => 'https://discord.com/api/webhooks/test/test', 'server_patch_discord_notifications' => true]);
+    Http::preventStrayRequests();
+    Http::fake([
+        'cve.now/stack*' => Http::response(['packages' => 1, 'entries' => [['id' => 'CVE-2026-12345', 'severity' => ['cvss' => 5.0], 'exploitation' => ['kev' => true], 'matched' => ['ecosystem' => 'npm', 'name' => 'example', 'version' => '1.0.0'], 'affected' => []]]]),
+        'api.enclave.ai/v1/threats' => Http::response(['ok' => true, 'ranAt' => '2026-11-01T12:00:00Z', 'threats' => []]),
+    ]);
+    $service = $this->partialMock(CveNowService::class, fn ($mock) => $mock->shouldReceive('collect')->andReturn(['packages' => [['ecosystem' => 'npm', 'name' => 'example', 'version' => '1.0.0', 'container' => 'API']], 'runtimes' => [], 'containers' => [], 'warnings' => []]));
+    $this->mock(CweService::class, function ($mock) use ($service, $server) {
+        $mock->shouldReceive('enrich')->once()->andReturnUsing(function ($report) use ($service, $server) {
+            expect($service->report($server))->toEqual($report);
+            expect($report['notified'])->toHaveCount(1);
+            Notification::assertSentTo($server->team, VulnerabilitiesFound::class);
+
+            return [...$report, 'warnings' => ['CWE lookup unavailable']];
+        });
+    });
+
+    (new ServerVulnerabilityCheckJob($server))->handle($service);
+
+    expect($service->report($server)['error'])->toBeNull();
+    expect($service->report($server)['findings'][0]['known_exploited'])->toBeTrue();
+    expect($service->report($server)['warnings'])->toBe(['CWE lookup unavailable']);
+    Notification::assertSentTimes(VulnerabilitiesFound::class, 1);
+});
 
 it('keeps verified fixes visible and escapes their review evidence', function () {
     Storage::fake('local');
