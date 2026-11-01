@@ -79,6 +79,9 @@ class SourceScanService
 
     public function collect(Server $server): array
     {
+        if ($this->architecture($server) !== 'x86_64') {
+            return [...$this->report($server), 'unsupported_host' => true, 'error' => 'Source scanning currently requires a Linux x86-64 server. Automatic scans are paused for this host. Scan manually after changing the host architecture.', 'attempted_at' => now()->toIso8601String()];
+        }
         $inventory = $this->targets($server);
         $targets = array_values(array_filter($inventory['targets'], fn ($target) => ! isset($target['unavailable'])));
         $results = [];
@@ -101,6 +104,11 @@ class SourceScanService
         }
 
         return $this->merge($this->report($server), $inventory, $results);
+    }
+
+    public function architecture(Server $server): string
+    {
+        return trim(instant_remote_process(['uname -m'], $server) ?? '');
     }
 
     public function merge(array $previous, array $inventory, array $results): array

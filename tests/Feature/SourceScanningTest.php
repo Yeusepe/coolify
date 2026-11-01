@@ -100,3 +100,15 @@ it('retains the last source report when the remote scan fails', function () {
     expect($service->report($server)['repositories'][0]['id'])->toBe('old');
     expect(json_encode($service->report($server)))->not->toContain('PRIVATE_TOKEN');
 });
+
+it('marks unsupported architectures before accessing credentials or pulling a scanner', function () {
+    $server = sourceScanningServer();
+    $service = $this->partialMock(SourceScanService::class, function ($mock) {
+        $mock->shouldReceive('architecture')->once()->andReturn('aarch64');
+        $mock->shouldNotReceive('targets');
+    });
+    $report = $service->collect($server);
+    expect($report['unsupported_host'])->toBeTrue();
+    expect($report['error'])->toContain('x86-64');
+    expect($report)->not->toHaveKey('repositories');
+});
