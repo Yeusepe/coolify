@@ -64,9 +64,11 @@ class FileBrowser extends Component
     #[Locked]
     public array $availableContainers = [];
 
+    #[Locked]
     public string $currentPath = '';
 
     /** @var array<int, array{name:string,type:string,size:int,mtime:int}> */
+    #[Locked]
     public array $entries = [];
 
     #[Locked]

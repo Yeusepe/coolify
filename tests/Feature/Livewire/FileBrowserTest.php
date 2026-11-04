@@ -397,6 +397,8 @@ it('rejects client changes to container access state', function (string $propert
     ['type', 'service'],
     ['containerRunning', false],
     ['availableContainers', ['someone-elses-container']],
+    ['currentPath', 'relative/path'],
+    ['entries', []],
 ])->throws(CannotUpdateLockedPropertyException::class);
 
 it('rechecks resource access before file operations', function (string $action, array $arguments) {
