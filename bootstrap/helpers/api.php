@@ -130,7 +130,7 @@ function apiEnvironmentVariableDisplayValue(mixed $data): mixed
  */
 function removeServerProxySecretsFromApiPayload(mixed $payload): mixed
 {
-    if (request()->attributes->get('can_read_sensitive', false) === true) {
+    if (request()->attributes->get('can_read_server_sensitive', false) === true) {
         return $payload;
     }
 

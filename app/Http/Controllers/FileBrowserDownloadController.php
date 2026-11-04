@@ -28,10 +28,9 @@ class FileBrowserDownloadController extends Controller
         $download = Cache::pull(self::cacheKey($token));
         abort_unless(is_array($download) && $download['user_id'] === auth()->id(), 404);
 
-        Gate::authorize('canAccessTerminal');
         $resource = $download['resource_type']::findOrFail($download['resource_id']);
         Gate::authorize('view', $resource);
-        abort_unless((int) $resource->environment->project->team_id === (int) auth()->user()->currentTeam()->id, 403);
+        abort_unless(auth()->user()->isAdminOfTeam($resource->environment->project->team_id), 403);
 
         $filesystem = new ContainerFilesystemService(Server::findOrFail($download['server_id']), $download['container'], $download['use_helper'] ?? false);
 

@@ -305,6 +305,10 @@ class DatabasesController extends Controller
      */
     private function exposeNestedServerSecrets(Model $model): void
     {
+        if (request()->attributes->get('can_read_server_sensitive', false) !== true) {
+            return;
+        }
+
         $server = $model->destination?->server;
         if ($server === null) {
             return;

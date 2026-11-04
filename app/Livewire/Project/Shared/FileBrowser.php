@@ -93,13 +93,10 @@ class FileBrowser extends Component
         $resource = $resource ?? $this->resolveResourceFromRoute();
 
         // Security gate first, before any server or container resolution.
-        $this->authorize('canAccessTerminal');
-        $this->authorize('view', $resource);
-        abort_unless((int) $resource->environment->project->team_id === (int) auth()->user()->currentTeam()->id, 403);
-
         $this->resource = $resource;
+        $this->authorizeFileAccess();
         $this->type = $this->resolveType($resource);
-        $this->containerRunning = (bool) $resource->isRunning();
+        $this->containerRunning = (bool) $this->resource->isRunning();
 
         $this->filesLoaded = ! $this->containerRunning;
     }
@@ -433,10 +430,9 @@ class FileBrowser extends Component
 
     protected function authorizeFileAccess(): void
     {
-        $this->authorize('canAccessTerminal');
         $this->resource->refresh();
         $this->authorize('view', $this->resource);
-        abort_unless((int) $this->resource->environment->project->team_id === (int) auth()->user()->currentTeam()->id, 403);
+        abort_unless(auth()->user()->isAdminOfTeam($this->resource->environment->project->team_id), 403);
     }
 
     protected function guard(): void

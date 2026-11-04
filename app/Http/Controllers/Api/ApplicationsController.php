@@ -271,6 +271,10 @@ class ApplicationsController extends Controller
      */
     private function exposeNestedServerSecrets($model): void
     {
+        if (request()->attributes->get('can_read_server_sensitive', false) !== true) {
+            return;
+        }
+
         $server = $model->destination?->server ?? null;
         if (! $server) {
             return;

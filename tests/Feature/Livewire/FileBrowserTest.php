@@ -127,6 +127,60 @@ it('loads the default directory in a deferred request for a running database', f
         ->assertSee('postgresql.conf');
 });
 
+it('checks the resource team after switching teams in another tab', function (bool $admin, string $otherRole) {
+    Process::fake(['*' => Process::result(output: '/data')]);
+    $database = fbRunningDatabase($this->environment, $this->destination);
+    $this->actingAs($this->admin);
+    session(['currentTeam' => $this->team]);
+    $component = Livewire::test(FileBrowser::class, ['resource' => $database]);
+
+    $otherTeam = Team::factory()->create();
+    $otherTeam->members()->attach($this->admin->id, ['role' => $otherRole]);
+    if (! $admin) {
+        $this->team->members()->updateExistingPivot($this->admin->id, ['role' => 'member']);
+    }
+    $this->actingAs($this->admin->fresh());
+    session(['currentTeam' => $otherTeam]);
+
+    $component->call('loadFiles');
+    if ($admin) {
+        $component->assertSet('currentPath', '/data');
+    } else {
+        $component->assertForbidden();
+        Process::assertNothingRan();
+    }
+})->with(['resource admin in owned team' => [true, 'owner'], 'resource admin in member team' => [true, 'member'], 'resource member in owned team' => [false, 'owner']]);
+
+it('checks the resource team when downloading after switching teams', function (bool $admin, string $otherRole) {
+    Process::fake();
+    $database = fbRunningDatabase($this->environment, $this->destination);
+    $otherTeam = Team::factory()->create();
+    $otherTeam->members()->attach($this->admin->id, ['role' => $otherRole]);
+    if (! $admin) {
+        $this->team->members()->updateExistingPivot($this->admin->id, ['role' => 'member']);
+    }
+    $this->actingAs($this->admin->fresh());
+    session(['currentTeam' => $otherTeam]);
+    $token = Str::random(40);
+    Cache::put(FileBrowserDownloadController::cacheKey($token), [
+        'user_id' => $this->admin->id,
+        'resource_type' => $database->getMorphClass(),
+        'resource_id' => $database->id,
+        'server_id' => $this->server->id,
+        'container' => $database->uuid,
+        'path' => '/data',
+        'name' => 'data.tar.gz',
+        'is_dir' => true,
+    ], 60);
+
+    $response = $this->get('/files/download/'.$token);
+    if ($admin) {
+        $response->assertOk()->assertStreamed();
+    } else {
+        $response->assertForbidden();
+    }
+})->with(['resource admin in owned team' => [true, 'owner'], 'resource admin in member team' => [true, 'member'], 'resource member in owned team' => [false, 'owner']]);
+
 function fbRunningDatabase($environment, $destination): StandalonePostgresql
 {
     return StandalonePostgresql::create([

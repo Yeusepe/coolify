@@ -12,6 +12,7 @@ use App\Models\Project;
 use App\Models\Scopes\VisibleThroughAccessGrants;
 use App\Models\Server;
 use App\Models\SharedEnvironmentVariable;
+use App\Models\StandalonePostgresql;
 use App\Models\Team;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -109,6 +110,39 @@ function scopedTokenTestMcp(string $token, string $method, array $params = [])
         'Accept' => 'application/json, text/event-stream',
     ])->postJson('/mcp', ['jsonrpc' => '2.0', 'id' => 1, 'method' => $method, 'params' => (object) $params]);
 }
+
+it('exposes only granted resource secrets to scoped sensitive tokens', function (bool $member) {
+    $user = $this->admin;
+    if ($member) {
+        $user = scopedTokenTestMember($this->team, [
+            ['scope' => 'project', 'uuid' => $this->shop->uuid, 'levels' => ['read:sensitive']],
+        ]);
+    }
+    $this->shopApi->update(['manual_webhook_secret_github' => 'application-secret-canary']);
+    $database = StandalonePostgresql::create([
+        'name' => 'scoped-secret-db',
+        'postgres_password' => 'database-secret-canary',
+        'environment_id' => $this->shopProduction->id,
+        'destination_id' => $this->destination->id,
+        'destination_type' => $this->destination->getMorphClass(),
+    ]);
+    $this->server->settings->update(['sentinel_token' => 'server-secret-canary']);
+    $this->server->update(['proxy' => ['last_saved_proxy_configuration' => 'proxy-secret-canary']]);
+    $token = scopedTokenTestToken($user, $this->team, ['read', 'read:sensitive'], [
+        ['scope' => 'project', 'uuid' => $this->shop->uuid],
+    ]);
+
+    foreach ([
+        '/applications' => 'application-secret-canary',
+        '/applications/'.$this->shopApi->uuid => 'application-secret-canary',
+        '/databases' => 'database-secret-canary',
+        '/databases/'.$database->uuid => 'database-secret-canary',
+    ] as $path => $secret) {
+        $body = scopedTokenTestApi($token, 'GET', '/api/v1'.$path)->assertOk()->getContent();
+        expect($body)->toContain($secret)
+            ->not->toContain('server-secret-canary', 'proxy-secret-canary', '"sentinel_token":', 'last_saved_proxy_configuration');
+    }
+})->with(['admin' => false, 'granted member' => true]);
 
 describe('admin token scoped to one project', function () {
     beforeEach(function () {
