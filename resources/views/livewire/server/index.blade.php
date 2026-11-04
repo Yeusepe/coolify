@@ -49,8 +49,12 @@
                     $patchStatus['error'] !== null => ['label' => 'Patch check failed', 'type' => 'error'],
                     $patchStatus['security'] > 0 => ['label' => $patchStatus['security'].' security '.str('update')->plural($patchStatus['security']), 'type' => 'error'],
                     $patchStatus['updates'] > 0 => ['label' => $patchStatus['updates'].' '.str('update')->plural($patchStatus['updates']), 'type' => 'warning'],
-                    default => ['label' => 'Up to date', 'type' => 'success'],
+                    default => ['label' => 'No package updates', 'type' => 'neutral'],
                 };
+                $hostCves = count(data_get($server->settings->patch_check_result, 'host_security.cves', []));
+                if ($hostCves > 0) {
+                    $patchBadges[] = ['label' => $hostCves.' host '.str('CVE')->plural($hostCves), 'type' => 'error'];
+                }
                 if ($patchStatus['error'] === null && $patchStatus['reboot_required']) {
                     $patchBadges[] = ['label' => 'Reboot required', 'type' => 'warning'];
                 }

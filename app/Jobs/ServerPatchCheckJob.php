@@ -82,7 +82,7 @@ class ServerPatchCheckJob implements ShouldBeEncrypted, ShouldQueue
                 return;
             }
 
-            if (! $this->manual && ($patchData['total_updates'] ?? 0) > 0) {
+            if (! $this->manual && (($patchData['total_updates'] ?? 0) > 0 || ! empty($patchData['host_security']['cves']) || ($patchData['reboot_required'] ?? null) === true)) {
                 $team->notify(new ServerPatchCheck($this->server, $patchData));
             }
         } catch (\Throwable $e) {

@@ -1,6 +1,8 @@
 <x-emails.layout>
 {{ $total_updates }} package updates are available for your server {{ $name }}.
 
+{{ $host_security_summary ?? '' }}
+
 ## Summary
 
 - Operating System: {{ ucfirst($osId) }}
@@ -45,7 +47,7 @@ No critical packages requiring container restarts detected.
 3. Apply updates through the Coolify dashboard
 4. Monitor services after updates are applied
 @else
-Your server is up to date! No packages require updating at this time.
+No package updates are available. Review the host CVE report and reboot status separately.
 @endif
 
 ---

@@ -1,5 +1,6 @@
 <?php
 
+use App\Actions\Server\CheckHostSecurity;
 use App\Actions\Server\CheckUpdates;
 use App\Actions\Server\UpdatePackage;
 use App\Models\Server;
@@ -302,7 +303,7 @@ it('reads the reboot status and runs its check as one sudo shell script', functi
         ->and($action->parseRebootStatus(''))->toBeNull();
 
     $server = patchCommandsNonRootServer();
-    foreach ([CheckUpdates::REBOOT_CHECK_COMMAND, CheckUpdates::DNF_SECURITY_COMMAND, CheckUpdates::ZYPPER_SECURITY_COMMAND] as $command) {
+    foreach ([CheckUpdates::REBOOT_CHECK_COMMAND, CheckUpdates::ZYPPER_SECURITY_COMMAND, CheckHostSecurity::KERNEL_CHECK_COMMAND] as $command) {
         expect(parseCommandsByLineForSudo(collect([$command]), $server))->toBe(['sudo '.$command]);
     }
 });

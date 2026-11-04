@@ -58,13 +58,6 @@ class CheckUpdates
     public const PACMAN_CHECK_COMMAND = "sh -c 'if command -v checkupdates >/dev/null 2>&1 && command -v fakeroot >/dev/null 2>&1; then checkupdates; rc=\$?; if [ \$rc -eq 2 ]; then exit 0; fi; exit \$rc; fi; db=\$(mktemp -d) || exit 1; chmod 755 \"\$db\"; ln -s /var/lib/pacman/local \"\$db/local\"; if ! LANG=C pacman -Sy --dbpath \"\$db\" --logfile /dev/null >/dev/null; then rm -rf \"\$db\"; exit 1; fi; pacman -Qu --dbpath \"\$db\" 2>/dev/null; rm -rf \"\$db\"; exit 0'";
 
     /**
-     * Security advisories of the available updates. dnf5 still accepts `updateinfo` as an alias of `advisory`.
-     *
-     * @see https://dnf5.readthedocs.io/en/latest/commands/advisory.8.html
-     */
-    public const DNF_SECURITY_COMMAND = "sh -c 'LANG=C dnf updateinfo list --security -q 2>/dev/null; exit 0'";
-
-    /**
      * Packages that the security patches would upgrade. `zypper -x list-patches` ignores --category, and it does
      * not contain package names, so a dry run of `zypper patch` is used.
      *
@@ -81,7 +74,7 @@ class CheckUpdates
      * @see https://dnf-plugins-core.readthedocs.io/en/latest/needs_restarting.html
      */
     public const REBOOT_CHECK_COMMAND = <<<'SH'
-sh -c 'if [ -f /var/run/reboot-required ]; then echo REBOOT=yes; exit 0; fi; if command -v needrestart >/dev/null 2>&1; then k=$(needrestart -b 2>/dev/null | sed -n "s/^NEEDRESTART-KSTA: *//p"); case "$k" in 2|3) echo REBOOT=yes; exit 0;; 1) echo REBOOT=no; exit 0;; esac; fi; if command -v dnf >/dev/null 2>&1; then o=$(LANG=C dnf needs-restarting -r 2>/dev/null); case "$o" in *"Reboot is required"*) echo REBOOT=yes; exit 0;; *"should not be necessary"*) echo REBOOT=no; exit 0;; esac; fi; if command -v zypper >/dev/null 2>&1; then zypper -q needs-rebooting >/dev/null 2>&1; rc=$?; if [ $rc -eq 102 ]; then echo REBOOT=yes; exit 0; fi; if [ $rc -eq 0 ]; then echo REBOOT=no; exit 0; fi; fi; if [ -d /var/lib/dpkg ]; then echo REBOOT=no; exit 0; fi; echo REBOOT=unknown'
+sh -c 'if command -v pro >/dev/null 2>&1; then r=$(LANG=C pro system reboot-required 2>/dev/null); case "$r" in yes|no|yes-kernel-livepatches-applied) echo "REBOOT=$r"; exit 0;; esac; fi; if [ -f /var/run/reboot-required ]; then echo REBOOT=yes; exit 0; fi; if command -v needrestart >/dev/null 2>&1; then k=$(needrestart -b -r l 2>/dev/null | sed -n "s/^NEEDRESTART-KSTA: *//p"); case "$k" in 2|3) echo REBOOT=yes; exit 0;; 1) echo REBOOT=no; exit 0;; esac; fi; if command -v dnf >/dev/null 2>&1; then o=$(LANG=C dnf needs-restarting -r 2>/dev/null); case "$o" in *"Reboot is required"*) echo REBOOT=yes; exit 0;; *"should not be necessary"*) echo REBOOT=no; exit 0;; esac; fi; if command -v zypper >/dev/null 2>&1; then zypper -q needs-rebooting >/dev/null 2>&1; rc=$?; if [ $rc -eq 102 ]; then echo REBOOT=yes; exit 0; fi; if [ $rc -eq 0 ]; then echo REBOOT=no; exit 0; fi; fi; echo REBOOT=unknown'
 SH;
 
     /**
@@ -202,7 +195,8 @@ SH;
                     $output = instant_remote_process([self::DNF_UPGRADES_COMMAND], $server);
                     $installed = instant_remote_process([self::RPM_INSTALLED_COMMAND], $server);
                     $out = $this->parseDnfOutput($output, $installed);
-                    $securityPackages = $this->parseDnfSecurityPackages((string) instant_remote_process([self::DNF_SECURITY_COMMAND], $server, false));
+                    $out['host_security'] = CheckHostSecurity::run($server, $osId, $packageManager, $osInfo['VERSION_CODENAME'] ?? '');
+                    $securityPackages = $out['host_security']['error'] === null ? $this->parseDnfSecurityPackages($out['host_security']['report']) : null;
                     break;
                 case 'apt':
                     instant_remote_process(['apt-get update -qq'], $server);
@@ -232,7 +226,10 @@ SH;
             }
 
             $out = $this->addUpdateDetails($out, $packageManager, $securityPackages);
-            $out['reboot_required'] = $this->parseRebootStatus((string) instant_remote_process([self::REBOOT_CHECK_COMMAND], $server, false));
+            $rebootStatus = (string) instant_remote_process([self::REBOOT_CHECK_COMMAND], $server, false);
+            $out['reboot_required'] = $this->parseRebootStatus($rebootStatus);
+            $out['kernel_livepatched'] = str_contains($rebootStatus, 'REBOOT=yes-kernel-livepatches-applied');
+            $out['host_security'] ??= CheckHostSecurity::run($server, $osId, $packageManager, $osInfo['VERSION_CODENAME'] ?? '');
             $out['osId'] = $osId;
             $out['package_manager'] = $packageManager;
 

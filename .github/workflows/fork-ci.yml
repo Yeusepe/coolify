@@ -60,6 +60,10 @@ jobs:
           tests/Feature/SoftwareRecommendationServiceTest.php
           tests/TestCase.php
           tests/Feature/SshMultiplexingLockTest.php
+          app/Actions/Server/CheckHostSecurity.php app/Actions/Server/CheckUpdates.php
+          app/Jobs/ServerPatchCheckJob.php app/Notifications/Server/ServerPatchCheck.php
+          tests/Feature/Server/HostSecurityCheckTest.php tests/Feature/Server/ServerPatchesTest.php
+          tests/Feature/Server/ServerListPatchStatusTest.php tests/Unit/Actions/Server/ServerPatchCommandsTest.php
       - name: Full upstream regression suite
         if: inputs.full_suite == true
         run: php artisan test --compact --parallel --processes=4 --testsuite=Unit,Feature
@@ -104,6 +108,9 @@ jobs:
           tests/Feature/SoftwareRecommendationServiceTest.php
           tests/Feature/CveNowMonitoringTest.php
           tests/Feature/SourceScanServiceTest.php tests/Feature/SourceScanningTest.php
+          tests/Feature/Server/HostSecurityCheckTest.php tests/Feature/Server/ServerPatchesTest.php
+          tests/Feature/Server/ServerListPatchStatusTest.php tests/Feature/Server/ServerPatchCheckNotificationTest.php
+          tests/Unit/Actions/Server/ServerPatchCommandsTest.php
       - run: php artisan test --compact tests/Feature/ReverbAndTerminalPackagingTest.php --filter="runs Reverb and terminal"
       - run: php artisan view:cache
       - run: php artisan view:clear

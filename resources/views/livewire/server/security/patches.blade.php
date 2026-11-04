@@ -79,7 +79,7 @@
                             </span>
                             @if ($checkedAt && ! $error)
                                 @if ($totalUpdates === 0)
-                                    <x-status-badge status="Up to date" type="success" />
+                                    <x-status-badge status="No package updates" />
                                 @endif
                                 @if ($securityUpdates > 0)
                                     <x-status-badge :status="$securityUpdates . ' ' . Str::plural('security update', $securityUpdates)" type="error" />
@@ -168,6 +168,46 @@
                 </x-application.settings-section>
             </form>
 
+            @if (! $checking && ! $error && $checkedAt)
+                <x-application.settings-section title="Host vulnerabilities"
+                    helper="Native distro advisories account for vendor backports. Package updates alone do not establish whether the running kernel is fixed.">
+                    <div class="space-y-4 text-sm">
+                        <div>Running kernel: <code>{{ data_get($result, 'host_security.running_kernel') ?? 'Unknown' }}</code></div>
+                        @if (data_get($result, 'host_security.kernel_package'))
+                            <div>Kernel package: <code>{{ data_get($result, 'host_security.kernel_package') }}</code></div>
+                        @else
+                            <x-callout type="warning" title="Running kernel not verified">
+                                The running kernel could not be mapped to an installed distro package. Check custom or removed kernels manually.
+                            </x-callout>
+                        @endif
+                        @if (data_get($result, 'reboot_required') === null)
+                            <x-callout type="warning" title="Reboot status unknown">
+                                A missing reboot marker does not prove the running kernel is current. Check the distro's reboot tool (Ubuntu Pro, needrestart, dnf needs-restarting, or zypper needs-rebooting).
+                            </x-callout>
+                        @elseif ($rebootRequired)
+                            <x-callout type="warning" title="Installed updates need a reboot">
+                                Installed packages can be fixed while the running kernel still needs an update. Recheck after rebooting.
+                                @if (data_get($result, 'kernel_livepatched'))
+                                    Ubuntu reports Livepatch protection. A reboot is still pending; this does not certify every CVE as fixed.
+                                @endif
+                            </x-callout>
+                        @endif
+                        @if (data_get($result, 'host_security.error'))
+                            <x-callout type="warning" title="Host CVE coverage unavailable">{{ data_get($result, 'host_security.error') }}</x-callout>
+                        @elseif (data_get($result, 'host_security.source'))
+                            <div>{{ data_get($result, 'host_security.source') }}: {{ count(data_get($result, 'host_security.cves', [])) }} unique CVEs in the native report.</div>
+                            <details>
+                                <summary class="cursor-pointer font-medium">View native advisory report</summary>
+                                <pre class="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-words text-xs">{{ data_get($result, 'host_security.report') ?: 'No CVEs reported by the distro tool.' }}</pre>
+                            </details>
+                            <p class="text-neutral-500 dark:text-fg-faint">Reports cover published distro advisories and may include unused kernels. Some vendors list only issues with released fixes. Review the running kernel above; missing CVEs do not establish that it is unaffected.</p>
+                        @else
+                            <x-callout type="info" title="Host CVEs not checked">Run Check for updates to collect distro advisories.</x-callout>
+                        @endif
+                    </div>
+                </x-application.settings-section>
+            @endif
+
             @if ($checking)
                 <div wire:poll.10s="loadResult">
                     <x-application.settings-section title="Checking for updates"
@@ -188,7 +228,7 @@
             @elseif ($checkedAt && $totalUpdates === 0)
                 <x-application.settings-section title="Package updates"
                     helper="Available operating system updates for this server.">
-                    <x-empty size="sm" title="Server is up to date"
+                    <x-empty size="sm" title="No package updates"
                         description="No package updates are currently available." icon-name="check-circle" />
                 </x-application.settings-section>
             @elseif ($totalUpdates > 0)
