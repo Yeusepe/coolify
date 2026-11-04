@@ -104,6 +104,7 @@ jobs:
           tests/Feature/SoftwareRecommendationServiceTest.php
           tests/Feature/CveNowMonitoringTest.php
           tests/Feature/SourceScanServiceTest.php tests/Feature/SourceScanningTest.php
+      - run: php artisan test --compact tests/Feature/ReverbAndTerminalPackagingTest.php --filter="runs Reverb and terminal"
       - run: php artisan view:cache
       - run: php artisan view:clear
 

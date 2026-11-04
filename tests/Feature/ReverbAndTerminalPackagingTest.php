@@ -90,7 +90,7 @@ it('removes the legacy realtime container during upgrades', function (string $sc
     'upgrade script' => ['scripts/upgrade.sh'],
 ]);
 
-it('runs Reverb and terminal websocket services inside the Coolify containers', function (string $dockerfile, string $dependencyService) {
+it('runs Reverb and terminal websocket services inside the Coolify containers', function (string $dockerfile, string $dependencyService, string $bundlePath) {
     $dockerfileContents = file_get_contents(base_path($dockerfile));
 
     expect($dockerfileContents)
@@ -108,11 +108,11 @@ it('runs Reverb and terminal websocket services inside the Coolify containers', 
         ->toContain('exec node /terminal/terminal-server.js')
         ->and(file_exists(base_path(dirname($dockerfile)."/etc/s6-overlay/s6-rc.d/reverb/dependencies.d/{$dependencyService}")))->toBeTrue()
         ->and(file_exists(base_path(dirname($dockerfile)."/etc/s6-overlay/s6-rc.d/terminal-server/dependencies.d/{$dependencyService}")))->toBeTrue()
-        ->and(file_exists(base_path(dirname($dockerfile).'/etc/s6-overlay/user-bundles.d/user/contents.d/reverb')))->toBeTrue()
-        ->and(file_exists(base_path(dirname($dockerfile).'/etc/s6-overlay/user-bundles.d/user/contents.d/terminal-server')))->toBeTrue();
+        ->and(file_exists(base_path(dirname($dockerfile)."/etc/s6-overlay/{$bundlePath}/contents.d/reverb")))->toBeTrue()
+        ->and(file_exists(base_path(dirname($dockerfile)."/etc/s6-overlay/{$bundlePath}/contents.d/terminal-server")))->toBeTrue();
 })->with([
-    'production image' => ['docker/production/Dockerfile', 'init-script'],
-    'development image' => ['docker/development/Dockerfile', 'init-setup'],
+    'production image' => ['docker/production/Dockerfile', 'init-script', 's6-rc.d/user'],
+    'development image' => ['docker/development/Dockerfile', 'init-setup', 'user-bundles.d/user'],
 ]);
 
 it('removes the dedicated realtime service from bundled compose files', function (string $composeFile, bool $hasRuntimeEnvironment) {
