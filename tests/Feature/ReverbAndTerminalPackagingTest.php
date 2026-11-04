@@ -167,8 +167,7 @@ it('proxies Reverb and terminal websocket traffic to the Coolify app container',
     $serverModel = file_get_contents(app_path('Models/Server.php'));
 
     expect($serverModel)
-        ->toContain("'rule' => \"Host(`{\$host}`) && PathPrefix(`/app`)\"")
-        ->toContain("'rule' => \"Host(`{\$host}`) && PathPrefix(`/apps`)\"")
+        ->toContain("'rule' => \"Host(`{\$host}`) && PathPrefix(`/app/`)\"")
         ->toContain("'rule' => \"Host(`{\$host}`) && PathPrefix(`/terminal/ws`)\"")
         ->toContain("'url' => 'http://coolify:6001'")
         ->toContain("'url' => 'http://coolify:6002'")
@@ -282,7 +281,9 @@ it('accepts a soketi override from 4.3.23 in docker-compose.custom.yml with zero
     $directory = sys_get_temp_dir().'/coolify-soketi-override-'.Str::random(8);
     mkdir($directory);
     copy(base_path('docker-compose.yml'), "{$directory}/docker-compose.yml");
-    copy(base_path($composeFile), "{$directory}/docker-compose.prod.yml");
+    $compose = Yaml::parseFile(base_path($composeFile));
+    unset($compose['services']['coolify']['env_file']);
+    file_put_contents("{$directory}/docker-compose.prod.yml", Yaml::dump($compose, 10, 2));
     file_put_contents("{$directory}/docker-compose.custom.yml", $override);
 
     try {

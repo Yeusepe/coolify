@@ -302,8 +302,9 @@ describe('POST /api/v1/servers/vultr', function () {
         $this->assertDatabaseHas('servers', [
             'name' => 'test-server',
             'ip' => '1.2.3.4',
-            'vultr_instance_status' => 'active',
+            'vultr_instance_status' => 'pending',
         ]);
+        Bus::assertDispatched(ValidateNewCloudServerJob::class);
     });
 
     test('explains a Vultr permission error without leaking the Vultr message', function () {

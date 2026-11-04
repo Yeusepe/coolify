@@ -87,7 +87,7 @@ test('a root team member cannot read the localhost server through onboarding que
     Livewire::test(Index::class, [
         'selectedServerType' => 'localhost',
         'selectedExistingServer' => 0,
-    ])->assertForbidden();
+    ])->assertRedirect(route('dashboard'));
 });
 
 test('an owner from another team cannot read the localhost server through onboarding query parameters', function () {
@@ -102,12 +102,13 @@ test('an owner from another team cannot read the localhost server through onboar
 test('unauthorized users cannot invoke localhost onboarding actions directly', function (string $role, string $method) {
     $user = $role === 'member' ? $this->rootMember : $this->otherOwner;
     $team = $role === 'member' ? $this->rootTeam : $this->otherTeam;
-    actAsBoardingUser($user, $team);
+    actAsBoardingUser($role === 'member' ? $this->rootOwner : $user, $team);
 
     $before = $this->localhost->fresh()->getAttributes();
 
     $component = Livewire::test(Index::class)
         ->set('createdServer', $this->localhost);
+    actAsBoardingUser($user, $team);
 
     if ($method === 'selectProxy') {
         $component->call($method, 'none')->assertForbidden();
@@ -160,16 +161,19 @@ test('a member cannot restore a restricted onboarding selection', function () {
     Livewire::test(Index::class, [
         'selectedServerType' => 'remote',
         'selectedExistingPrivateKey' => $this->otherKey->id,
-    ])->assertForbidden();
+    ])->assertRedirect(route('dashboard'));
 });
 
 test('a member cannot use a restricted onboarding selection', function () {
     $member = User::factory()->create();
     $member->teams()->attach($this->otherTeam, ['role' => 'member']);
     $this->otherTeam->update(['show_boarding' => false]);
+    actAsBoardingUser($this->otherOwner, $this->otherTeam);
+
+    $component = Livewire::test(Index::class);
     actAsBoardingUser($member, $this->otherTeam);
 
-    Livewire::test(Index::class)
+    $component
         ->set('selectedExistingPrivateKey', $this->otherKey->id)
         ->call('selectExistingPrivateKey')
         ->assertForbidden();
@@ -243,9 +247,12 @@ test('a hydrated private key model from another team is rejected before use', fu
 })->throws(ModelNotFoundException::class);
 
 test('members cannot directly create projects through onboarding', function () {
+    actAsBoardingUser($this->rootOwner, $this->rootTeam);
+
+    $component = Livewire::test(Index::class);
     actAsBoardingUser($this->rootMember, $this->rootTeam);
 
-    Livewire::test(Index::class)
+    $component
         ->call('createNewProject')
         ->assertForbidden();
 

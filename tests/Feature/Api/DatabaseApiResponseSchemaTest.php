@@ -41,7 +41,7 @@ beforeEach(function () {
         'keydb' => ['keydb_password' => 'secret'],
         'dragonfly' => ['dragonfly_password' => 'secret'],
         'clickhouse' => ['clickhouse_admin_password' => 'secret'],
-        'sqlite' => [],
+        'sqlite' => ['image' => 'peakimages/sqlite:3.54.1-v0.2.0'],
     ];
 
     $this->databases = collect(STANDALONE_DATABASE_MODELS)->map(fn (string $class, string $engine) => $class::create($passwords[$engine] + [

@@ -60,6 +60,7 @@ test('server transfer page is available in production', function () {
 });
 
 test('server transfer link is shown to admins in production', function () {
+    $this->server->settings->update(['is_reachable' => true, 'is_usable' => true]);
     $this->get('/server/'.$this->server->uuid)
         ->assertOk()
         ->assertSee('/server/'.$this->server->uuid.'/transfer', escape: false);

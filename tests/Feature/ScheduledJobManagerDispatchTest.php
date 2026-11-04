@@ -10,6 +10,7 @@ use App\Models\Application;
 use App\Models\DockerCleanupExecution;
 use App\Models\Environment;
 use App\Models\InstanceSettings;
+use App\Models\NotificationThrottle;
 use App\Models\PrivateKey;
 use App\Models\Project;
 use App\Models\ScheduledDatabaseBackup;
@@ -779,7 +780,7 @@ it('records a missed database backup that is too old to run late as a failed exe
     Event::assertDispatched(BackupCreated::class);
 });
 
-it('sends at most one missed-run notification per hour for the same schedule', function (string $jobType) {
+it('sends missed-run reminders only after the notification throttle expires', function (string $jobType) {
     config(['constants.coolify.self_hosted' => true]);
     Carbon::setTestNow(Carbon::create(2026, 9, 17, 12, 0, 0, 'UTC'));
     Queue::fake();
@@ -810,8 +811,8 @@ it('sends at most one missed-run notification per hour for the same schedule', f
     Notification::assertSentToTimes($team, $notification, 1);
 
     // More than an hour later, a new missed run is reported again.
-    Carbon::setTestNow(Carbon::create(2026, 9, 17, 13, 5, 0, 'UTC'));
-    createStaleEnqueuedOccurrence($scheduleKey, $jobType, $resourceId, Carbon::create(2026, 9, 17, 11, 30, 0, 'UTC'));
+    Carbon::setTestNow(Carbon::create(2026, 9, 17, 12, 0, 0, 'UTC')->addMinutes(NotificationThrottle::FAILURE_REMINDER_INTERVAL_MINUTES + 5));
+    createStaleEnqueuedOccurrence($scheduleKey, $jobType, $resourceId, now()->subMinutes(95));
     (new ScheduledJobManager)->handle();
 
     // Each missed run still gets its own failed execution (Docker cleanup also has its own 12:00 run).

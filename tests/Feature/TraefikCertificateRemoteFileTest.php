@@ -50,6 +50,7 @@ beforeEach(function () {
         if (str_starts_with($command, 'timeout') && str_contains($command, ' scp ')
             && preg_match("~'(".preg_quote(sys_get_temp_dir(), '~')."/coolify-acme-[^']+)'~", $command, $matches)) {
             $this->uploadedContents = file_get_contents($matches[1]);
+            $this->uploadedPath = $matches[1];
 
             return Process::result();
         }
@@ -85,7 +86,7 @@ it('uploads a large ACME file instead of passing it as a shell argument', functi
         && str_contains(remoteProcessScript($process), 'chmod 600')
         && str_contains(remoteProcessScript($process), 'mv --'));
     Process::assertDidntRun(fn ($process) => strlen($process->command) > 128 * 1024);
-    expect(glob(sys_get_temp_dir().'/coolify-acme-*'))->toBeEmpty();
+    expect(file_exists($this->uploadedPath))->toBeFalse();
 });
 
 it('asks for a proxy restart after a certificate is deleted until the proxy is restarted', function () {

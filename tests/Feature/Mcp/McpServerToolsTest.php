@@ -305,6 +305,7 @@ test('manage_server updates, validates, and deletes its own server', function ()
 // ---------------------------------------------------------------- manage_proxy
 
 test('manage_proxy reads and updates the proxy of its own server and queues a restart', function () {
+    $this->server->settings->update(['is_reachable' => true, 'is_usable' => true]);
     $token = mcpSrvToken($this->user, ['read', 'write', 'deploy']);
 
     $get = mcpSrvCall($token, 'manage_proxy', ['action' => 'get', 'uuid' => $this->server->uuid]);
@@ -372,6 +373,7 @@ test('docker_cleanup cannot touch a server of another team', function (string $a
 // ---------------------------------------------------------------- manage_destination
 
 test('manage_destination creates, renames, and deletes a destination on its own server', function () {
+    $this->server->settings->update(['is_reachable' => true, 'is_usable' => true]);
     $cleanup = Mockery::mock(RemoveStandaloneDockerNetwork::class);
     $cleanup->shouldReceive('handle')->once();
     $this->app->instance(RemoveStandaloneDockerNetwork::class, $cleanup);

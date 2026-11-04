@@ -4,6 +4,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
 
@@ -103,8 +104,10 @@ it('declares update authorization on service backup mutation controls', function
         '/<x-forms\.listbox(?=[^>]*id="selectedDatabaseUuid")(?=[^>]*canGate="update")(?=[^>]*:canResource="\$service")[^>]*>/'
     );
 
+    expect(Str::between($volumeBackupView, '<x-modal-input :title="\'Edit backup schedule\'"', '<x-slot:content>'))
+        ->toContain('canGate="update" :canResource="$service"');
+
     expect($volumeBackupView)
-        ->toMatch('/<x-modal-input(?=[^>]*:title="\'Edit backup schedule\'")(?=[^>]*canGate="update")(?=[^>]*:canResource="\$service")[^>]*>/')
         ->toMatch('/@can\(\'update\', \$service\)\s*<x-table\.row-actions\b(?:(?!@endcan).)*?wire:click="backupNow\(\'database\',/s')
         ->toMatch('/@can\(\'update\', \$service\)\s*<x-table\.row-actions\b(?:(?!@endcan).)*?wire:click="backupNow\(\'storage\',/s');
 });

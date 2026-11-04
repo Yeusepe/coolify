@@ -179,7 +179,7 @@ test('updating a scheduled task records changed field names only', function () {
     $task = createScheduleAuditTask($this->team, $this->application);
     bindScheduleAuditTaskRoute($this->application, $task);
 
-    Livewire::test(ShowScheduledTask::class)
+    Livewire::test(ShowScheduledTask::class, ['resource' => $this->application, 'task' => $task])
         ->set('command', 'echo token=super-secret')
         ->set('timeout', 600)
         ->call('submit');
@@ -195,7 +195,7 @@ test('saving a scheduled task without changes records no audit event', function 
     $task = createScheduleAuditTask($this->team, $this->application);
     bindScheduleAuditTaskRoute($this->application, $task);
 
-    Livewire::test(ShowScheduledTask::class)
+    Livewire::test(ShowScheduledTask::class, ['resource' => $this->application, 'task' => $task])
         ->call('submit')
         ->call('instantSave');
 
@@ -206,7 +206,7 @@ test('toggling and deleting a scheduled task record audit events', function () {
     $task = createScheduleAuditTask($this->team, $this->application);
     bindScheduleAuditTaskRoute($this->application, $task);
 
-    Livewire::test(ShowScheduledTask::class)
+    Livewire::test(ShowScheduledTask::class, ['resource' => $this->application, 'task' => $task])
         ->call('toggleEnabled')
         ->call('delete');
 

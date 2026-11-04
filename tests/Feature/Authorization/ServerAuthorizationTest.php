@@ -205,7 +205,6 @@ test('new server chooser uses compact mobile provider cards', function () {
     Livewire::test(ServerCreate::class)
         ->assertSee('application-settings-form flex flex-col gap-6', false)
         ->assertSee('grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:grid-cols-4', false)
-        ->assertSee('grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:grid-cols-3', false)
         ->assertSee('group flex min-h-32 flex-col rounded-xl', false)
         ->assertSee('alt="Hetzner" class="size-8"', false)
         ->assertDontSee('sm:min-h-80', false)

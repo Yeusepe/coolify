@@ -200,9 +200,6 @@ it('redacts database environment values with the same rules as other resources',
 
 it('redacts stored database credentials even without environment variables', function (string $model, array $attributes) {
     $database = new $model($attributes);
-    if ($database instanceof StandaloneMongodb) {
-        $database->mongo_initdb_root_password = encrypt($attributes['mongo_initdb_root_password']);
-    }
     $database->setRelation('runtime_environment_variables', collect());
 
     $secrets = EnvironmentVariable::logRedactionSecretsFor($database);

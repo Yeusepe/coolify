@@ -57,7 +57,7 @@ it('renders frontend-only application backup search data for volume names and fr
         ->assertSee('Filter')
         ->assertSee('Sort')
         ->assertSee('All targets')
-        ->assertSee('Target A–Z')
+        ->assertSee('target_asc', false)
         ->assertSee('filterOpen')
         ->assertSee('sortOpen')
         ->assertDontSee('class="font-mono text-xs">daily', false)

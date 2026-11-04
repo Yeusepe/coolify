@@ -547,7 +547,7 @@ it('lists databases and service containers that use a registry, and each service
         'postgres_db' => 'app',
         'image' => 'ghcr.io/acme/postgres:16',
     ] + $placement);
-    StandalonePostgresql::create([
+    $coolifyDatabase = StandalonePostgresql::create([
         'name' => 'coolify-db',
         'postgres_user' => 'postgres',
         'postgres_password' => encrypt('password'),
@@ -567,6 +567,7 @@ it('lists databases and service containers that use a registry, and each service
 
     expect($registries['ghcr.io']['used_by'])->toBe([
         ['type' => 'Database', 'name' => 'private-db', 'link' => $database->link()],
+        ['type' => 'Database', 'name' => 'coolify-db', 'link' => $coolifyDatabase->link()],
         ['type' => 'Service', 'name' => 'private-stack', 'link' => $service->link()],
     ])
         ->and($registries['docker.io']['used_by'])->toBe([

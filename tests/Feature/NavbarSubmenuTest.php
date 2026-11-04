@@ -96,7 +96,7 @@ test('the admin link belongs to the main menu, not to submenus', function () {
     session(['currentTeam' => test()->team]);
 
     expect(renderNavbarAt('/team'))
-        ->toMatch('#<li\s+x-show="!submenu"\s+x-cloak[^>]*>\s*<a title="Admin"#');
+        ->toMatch('#<li\s+x-show="navLevel === -1 && !submenu"\s+x-cloak[^>]*>\s*<a title="Admin"#');
 });
 
 test('shared variables open their own submenu', function () {
@@ -126,7 +126,7 @@ test('a parent entry opens its submenu in place on mobile and desktop', function
 
     foreach ([renderNavbarAt('/servers', mobile: true), renderNavbarAt('/servers')] as $html) {
         expect($html)
-            ->toContain('x-show="submenu === \'Monitoring\'"')
+            ->toContain('x-show="navLevel === -1 && submenu === \'Monitoring\'"')
             ->toMatch('#<button type="button" title="Monitoring" @click="submenu = \'Monitoring\'#')
             ->not->toMatch('#<a title="Monitoring"#');
     }

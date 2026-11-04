@@ -150,10 +150,12 @@ it('warns before an instance switches to nightly or a custom image', function (s
     $this->actingAs($user);
     session(['currentTeam' => ['id' => 0]]);
 
-    Livewire::test(Updates::class)
-        ->assertDontSee($warning)
-        ->set('update_channel', $channel)
-        ->assertSee($warning);
+    $component = Livewire::test(Updates::class)->assertSee($warning);
+    $hiddenWarningPattern = '/'.preg_quote('x-show="$wire.update_channel === \''.$channel.'\'"', '/').'\s+x-cloak/';
+    expect($component->html())->toMatch($hiddenWarningPattern);
+
+    $component->set('update_channel', $channel)->assertSee($warning);
+    expect($component->html())->not->toMatch($hiddenWarningPattern);
 })->with([
     'nightly' => ['nightly', 'Nightly builds can break this instance'],
     'custom image' => ['custom', 'A custom image can break this instance'],
