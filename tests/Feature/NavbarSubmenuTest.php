@@ -35,7 +35,7 @@ test('a submenu page opens its submenu with the current page active', function (
 
     expect($html)
         ->toContain('Back to the main menu')
-        ->toMatch('#aria-current="page"[^>]*>\s*<svg[^>]*>.*?</svg>\s*<span[^>]*>Metrics</span>#s');
+        ->toMatch('#<a title="Metrics"[^>]*aria-current="page"#s');
 });
 
 test('a page outside every submenu starts on the main menu', function () {
@@ -105,7 +105,7 @@ test('shared variables open their own submenu', function () {
     expect(renderNavbarAt('/shared-variables/servers'))
         ->toContain('Back to the main menu')
         ->toContain('href="'.route('shared-variables.team.index').'"')
-        ->toMatch('#aria-current="page"[^>]*>\s*<svg[^>]*>.*?</svg>\s*<span[^>]*>Servers</span>#s');
+        ->toMatch('#<a title="Servers"[^>]*aria-current="page"#s');
 });
 
 test('instance settings open their own submenu for instance admins', function () {
@@ -118,7 +118,7 @@ test('instance settings open their own submenu for instance admins', function ()
     expect(renderNavbarAt('/settings/email'))
         ->toContain('Back to the main menu')
         ->toContain('href="'.route('settings.oauth').'"')
-        ->toMatch('#aria-current="page"[^>]*>\s*<svg[^>]*>.*?</svg>\s*<span[^>]*>Email</span>#s');
+        ->toMatch('#<a title="Email"[^>]*aria-current="page"#s');
 });
 
 test('a parent entry opens its submenu in place on mobile and desktop', function () {
