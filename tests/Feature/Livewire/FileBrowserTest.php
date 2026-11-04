@@ -569,10 +569,10 @@ it('only lets the token owner use a download token, and only once', function () 
         ->assertNotFound();
 });
 
-it('blocks members from the download route', function () {
+it('does not reveal unknown download tokens to members', function () {
     $this->actingAs($this->member)->withSession(['currentTeam' => $this->team])
         ->get(route('project.files.download', 'any'))
-        ->assertForbidden();
+        ->assertNotFound();
 });
 
 it('denies resources outside the current team even when the user belongs to both teams', function () {
