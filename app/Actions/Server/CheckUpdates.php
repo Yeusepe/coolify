@@ -58,6 +58,13 @@ class CheckUpdates
     public const PACMAN_CHECK_COMMAND = "sh -c 'if command -v checkupdates >/dev/null 2>&1 && command -v fakeroot >/dev/null 2>&1; then checkupdates; rc=\$?; if [ \$rc -eq 2 ]; then exit 0; fi; exit \$rc; fi; db=\$(mktemp -d) || exit 1; chmod 755 \"\$db\"; ln -s /var/lib/pacman/local \"\$db/local\"; if ! LANG=C pacman -Sy --dbpath \"\$db\" --logfile /dev/null >/dev/null; then rm -rf \"\$db\"; exit 1; fi; pacman -Qu --dbpath \"\$db\" 2>/dev/null; rm -rf \"\$db\"; exit 0'";
 
     /**
+     * Security advisories of the available updates. dnf5 still accepts `updateinfo` as an alias of `advisory`.
+     *
+     * @see https://dnf5.readthedocs.io/en/latest/commands/advisory.8.html
+     */
+    public const DNF_SECURITY_COMMAND = 'LANG=C dnf updateinfo list --security --available -q';
+
+    /**
      * Packages that the security patches would upgrade. `zypper -x list-patches` ignores --category, and it does
      * not contain package names, so a dry run of `zypper patch` is used.
      *
@@ -195,8 +202,8 @@ SH;
                     $output = instant_remote_process([self::DNF_UPGRADES_COMMAND], $server);
                     $installed = instant_remote_process([self::RPM_INSTALLED_COMMAND], $server);
                     $out = $this->parseDnfOutput($output, $installed);
-                    $out['host_security'] = CheckHostSecurity::run($server, $osId, $packageManager, $osInfo['VERSION_CODENAME'] ?? '');
-                    $securityPackages = $out['host_security']['error'] === null ? $this->parseDnfSecurityPackages($out['host_security']['report']) : null;
+                    $securityOutput = instant_remote_process([self::DNF_SECURITY_COMMAND], $server, false, timeout: 180, maxAttempts: 1);
+                    $securityPackages = $securityOutput === null ? null : $this->parseDnfSecurityPackages($securityOutput);
                     break;
                 case 'apt':
                     instant_remote_process(['apt-get update -qq'], $server);
@@ -226,10 +233,10 @@ SH;
             }
 
             $out = $this->addUpdateDetails($out, $packageManager, $securityPackages);
+            $out['host_security'] = CheckHostSecurity::run($server, $osId, $packageManager, $osInfo['VERSION_CODENAME'] ?? '');
             $rebootStatus = (string) instant_remote_process([self::REBOOT_CHECK_COMMAND], $server, false);
             $out['reboot_required'] = $this->parseRebootStatus($rebootStatus);
             $out['kernel_livepatched'] = str_contains($rebootStatus, 'REBOOT=yes-kernel-livepatches-applied');
-            $out['host_security'] ??= CheckHostSecurity::run($server, $osId, $packageManager, $osInfo['VERSION_CODENAME'] ?? '');
             $out['osId'] = $osId;
             $out['package_manager'] = $packageManager;
 
@@ -296,7 +303,7 @@ SH;
         $packages = [];
         foreach (preg_split('/\s+/', $output) as $token) {
             // name-[epoch:]version-release.arch: the name is everything before the last two dashes.
-            if (preg_match('/^(.+)-[^-\/]+-[^-\/]+\.[A-Za-z0-9_]+$/', $token, $matches)) {
+            if (preg_match('/^(.+)-[^-\/]+-[^-\/]+\.[A-Za-z][A-Za-z0-9_]*$/', $token, $matches)) {
                 $packages[] = $matches[1];
             }
         }

@@ -160,6 +160,7 @@
                         <x-callout type="info" title="Supported package managers">
                             Automated package discovery currently supports apk, apt, dnf, pacman, and zypper. Automatic
                             security updates are available for apt and dnf (Debian, Ubuntu, and RHEL family)@if ($packageManager && ! $autoUpdatesSupported); this server uses {{ $packageManager }}@endif.
+                            Host CVE reports need debsecan on Debian, Ubuntu Pro client 35+ on Ubuntu, or DNF security advisories. Other distros show coverage unavailable.
                             Status notifications can be managed from
                             <a class="font-medium underline" href="{{ route('notifications.email') }}"
                                 {{ wireNavigate() }}>notification settings</a>.

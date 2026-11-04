@@ -111,8 +111,8 @@ class ServerPatchCheck extends CustomEmailNotification
             if ($criticalPackages->count() > 0) {
                 $description .= "\n **Critical packages detected** ({$criticalPackages->count()} packages may require restarts)";
             }
-            $description .= "\n [Manage Server Patches]($this->serverUrl)";
         }
+        $description .= "\n [Manage Server Patches]($this->serverUrl)";
 
         return new DiscordMessage(
             title: ':warning: Coolify: [ACTION REQUIRED] Server security needs attention on '.$this->server->name,

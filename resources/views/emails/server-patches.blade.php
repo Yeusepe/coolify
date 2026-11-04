@@ -1,5 +1,9 @@
 <x-emails.layout>
+@if ($total_updates > 0)
 {{ $total_updates }} package updates are available for your server {{ $name }}.
+@else
+Server security needs attention on {{ $name }}.
+@endif
 
 {{ $host_security_summary ?? '' }}
 

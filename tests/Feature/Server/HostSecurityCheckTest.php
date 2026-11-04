@@ -142,13 +142,16 @@ it('runs the kernel and advisory checks with sudo for a non-root SSH user', func
     ['rocky', 'dnf', 'dnf updateinfo list'],
 ]);
 
-it('reuses the DNF advisory result for package security flags without a second scan', function (?string $error, ?int $count) {
+it('keeps DNF security advisories without CVEs and handles either query failing independently', function (?string $error, bool $classificationFailed, ?int $count) {
     $server = hostSecurityServer();
     $server->settings->update(['is_reachable' => true, 'is_usable' => true]);
     fakeRemoteProcesses([
         '*cat /etc/os-release*' => Process::result(output: 'ID=rocky'),
-        '*dnf repoquery*' => Process::result(output: 'openssl x86_64 3.5.8-2.el9 baseos'),
-        '*rpm -qa*' => Process::result(output: 'openssl x86_64 3.5.8-1.el9'),
+        '*dnf repoquery*' => Process::result(output: "openssl x86_64 3.5.8-2.el9 baseos\nmicrocode_ctl x86_64 4.0-2.el9 baseos"),
+        '*rpm -qa*' => Process::result(output: "openssl x86_64 3.5.8-1.el9\nmicrocode_ctl x86_64 4.0-1.el9"),
+        '*dnf updateinfo list --security --available*' => $classificationFailed
+            ? Process::result(errorOutput: 'Advisories unavailable', exitCode: 1)
+            : Process::result(output: "RLSA-2026:123 Important/Sec. openssl-3.5.8-2.el9.x86_64\nRLSA-2026:124 Important/Sec. microcode_ctl-4.0-2.el9.x86_64"),
     ]);
     CheckHostSecurity::shouldRun()->once()->andReturn([
         'cves' => $error === null ? ['CVE-2026-98432'] : [],
@@ -161,5 +164,5 @@ it('reuses the DNF advisory result for package security flags without a second s
     expect($result['security_updates'])->toBe($count)
         ->and($result['host_security']['error'])->toBe($error)
         ->and($result)->not->toHaveKey('error');
-    Process::assertDidntRun(fn ($process) => str_contains(remoteProcessScript($process), 'dnf updateinfo'));
-})->with([[null, 1], ['Advisories unavailable', null]]);
+    Process::assertRan(fn ($process) => str_contains(remoteProcessScript($process), 'dnf updateinfo list --security --available'));
+})->with([[null, false, 2], ['CVE check unavailable', false, 2], [null, true, null]]);

@@ -308,6 +308,17 @@ describe('security, reboot, and risk', function () {
         session(['currentTeam' => $this->team]);
     });
 
+    it('rechecks resource permissions when refreshing host reports after a team switch', function () {
+        $component = Livewire::test(Patches::class, ['server_uuid' => $this->server->uuid]);
+        $this->admin->teams()->updateExistingPivot($this->team->id, ['role' => 'member']);
+        $this->admin->unsetRelation('teams');
+        $otherTeam = Team::factory()->create();
+        $this->admin->teams()->attach($otherTeam, ['role' => 'owner']);
+        session(['currentTeam' => $otherTeam]);
+
+        $component->call('loadResult')->assertForbidden();
+    });
+
     it('shows the running kernel, pending reboot and escaped native advisory report', function () {
         $result = [...patchesTestResult(0), 'reboot_required' => true, 'kernel_livepatched' => true, 'host_security' => [
             'source' => 'Ubuntu security notices (pro cves)',
@@ -330,7 +341,13 @@ describe('security, reboot, and risk', function () {
 
         $notification = new ServerPatchCheck($this->server, $result);
         expect($notification->toWebhook()['host_cves'])->toBe(['CVE-2026-98432'])
-            ->and($notification->toTelegram()['message'])->toContain('1 unique CVEs', 'Reboot: Required');
+            ->and($notification->toTelegram()['message'])->toContain('1 unique CVEs', 'Reboot: Required')
+            ->and($notification->toDiscord()->description)->toContain($notification->serverUrl);
+
+        $mail = $notification->toMail();
+        expect(view($mail->view, $mail->viewData)->render())
+            ->toContain('Server security needs attention')
+            ->not->toContain('0 package updates are available');
     });
 
     it('shows missing coverage and unknown reboot status independently of package updates', function () {

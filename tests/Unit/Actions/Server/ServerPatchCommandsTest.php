@@ -303,7 +303,13 @@ it('reads the reboot status and runs its check as one sudo shell script', functi
         ->and($action->parseRebootStatus(''))->toBeNull();
 
     $server = patchCommandsNonRootServer();
-    foreach ([CheckUpdates::REBOOT_CHECK_COMMAND, CheckUpdates::ZYPPER_SECURITY_COMMAND, CheckHostSecurity::KERNEL_CHECK_COMMAND] as $command) {
+    foreach ([CheckUpdates::REBOOT_CHECK_COMMAND, CheckUpdates::ZYPPER_SECURITY_COMMAND, CheckHostSecurity::KERNEL_CHECK_COMMAND, CheckUpdates::DNF_SECURITY_COMMAND] as $command) {
         expect(parseCommandsByLineForSudo(collect([$command]), $server))->toBe(['sudo '.$command]);
     }
+});
+
+it('does not mistake advisory license references for package names', function () {
+    $output = 'CC-BY-4.0 Moderate/Sec. openssl-3.5.8-2.el9.x86_64';
+
+    expect((new CheckUpdates)->parseDnfSecurityPackages($output))->toBe(['openssl']);
 });
