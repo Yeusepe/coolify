@@ -30,6 +30,7 @@ defaults:
 jobs:
   plan:
     name: Plan build
+    if: ${{ github.repository == 'coollabsio/coolify' }}
     permissions:
       contents: read
     runs-on: ubuntu-26.04 # https://github.com/actions/runner-images

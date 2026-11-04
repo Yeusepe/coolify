@@ -18,6 +18,7 @@ defaults:
 jobs:
   detect:
     name: Detect release push
+    if: ${{ github.repository == 'coollabsio/coolify' }}
     permissions:
       contents: read
     runs-on: ubuntu-26.04 # https://github.com/actions/runner-images
