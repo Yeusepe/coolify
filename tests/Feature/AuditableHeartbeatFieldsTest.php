@@ -56,7 +56,7 @@ function createAuditedResourceForHeartbeatTest(string $model, Environment $envir
         StandaloneKeydb::class => ['keydb_password' => 'review-fix-e-password'],
         StandaloneDragonfly::class => ['dragonfly_password' => 'review-fix-e-password'],
         StandaloneClickhouse::class => ['clickhouse_admin_password' => 'review-fix-e-password'],
-        StandaloneSqlite::class => [],
+        StandaloneSqlite::class => ['image' => 'peakimages/sqlite:3.54.1-v0.2.0'],
     ];
 
     return $model::create([

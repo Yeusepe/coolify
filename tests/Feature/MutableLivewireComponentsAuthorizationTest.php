@@ -4,6 +4,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
 
@@ -103,10 +104,12 @@ it('declares update authorization on service backup mutation controls', function
         '/<x-forms\.listbox(?=[^>]*id="selectedDatabaseUuid")(?=[^>]*canGate="update")(?=[^>]*:canResource="\$service")[^>]*>/'
     );
 
+    expect(Str::between($volumeBackupView, '<x-modal-input :title="\'Edit backup schedule\'"', '<x-slot:content>'))
+        ->toContain('canGate="update" :canResource="$service"');
+
     expect($volumeBackupView)
-        ->toMatch('/<x-modal-input(?=[^>]*:title="\'Edit backup schedule\'")(?=[^>]*canGate="update")(?=[^>]*:canResource="\$service")[^>]*>/')
-        ->toMatch('/<x-forms\.button\s+type="button" canGate="update" :canResource="\$service"[^\n]*\n(?:[^\n]*\n){0,3}?\s*wire:click\.stop="backupNow\(\'database\',/')
-        ->toMatch('/<x-forms\.button(?=[^>]*wire:click\.stop="backupNow\(\'storage\',[^"]+")(?=[^>]*canGate="update")(?=[^>]*:canResource="\$service")[^>]*>/');
+        ->toMatch('/@can\(\'update\', \$service\)\s*<x-table\.row-actions\b(?:(?!@endcan).)*?wire:click="backupNow\(\'database\',/s')
+        ->toMatch('/@can\(\'update\', \$service\)\s*<x-table\.row-actions\b(?:(?!@endcan).)*?wire:click="backupNow\(\'storage\',/s');
 });
 
 it('declares update authorization on application port controls', function () {
@@ -182,7 +185,7 @@ it('authorizes every volume backup form control', function (string $path, array 
         [
             '/<x-forms\.button(?=[^>]*wire:click="toggleS3")(?=[^>]*canGate="update")(?=[^>]*:canResource="\$resource")[^>]*>\s*Enable S3\s*<\/x-forms\.button>/s',
             '/<x-forms\.button(?=[^>]*wire:click="toggleS3")(?=[^>]*canGate="update")(?=[^>]*:canResource="\$resource")[^>]*>\s*Disable S3\s*<\/x-forms\.button>/s',
-            '/<x-forms\.listbox canGate="update" :canResource="\$resource" id="s3StorageId"[\s\S]*?:disabled="! auth\(\)->user\(\)\?->can\(\'update\', \$resource\)"/',
+            '/<x-forms\.listbox canGate="update" :canResource="\$resource" id="s3StorageIds"/',
             '/<x-forms\.listbox canGate="update" :canResource="\$resource" id="disableLocalBackup"[\s\S]*?:disabled="! \$saveToS3 \|\| ! auth\(\)->user\(\)\?->can\(\'update\', \$resource\)"/',
         ],
     ],

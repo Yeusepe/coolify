@@ -135,6 +135,15 @@ services:
     networks:
       - coolify
 
+  coolify-helper:
+    image: coollabsio/coolify-helper:dev
+    pull_policy: build
+    build:
+      context: https://github.com/coollabsio/coolify-helper.git#main:src
+      args:
+        - IMAGE_VERSION=dev
+    command: ["true"]
+
   testing-host:
     profiles: ["testing-host"]
     image: coolify-testing-host:dev
@@ -166,7 +175,10 @@ services:
       - "${DEV_BIND_ADDRESS:-0.0.0.0}:${FORWARD_MAILPIT_PORT:-1025}:1025"
       - "${DEV_BIND_ADDRESS:-0.0.0.0}:${FORWARD_MAILPIT_DASHBOARD_PORT:-8025}:8025"
     networks:
-      - coolify
+      coolify:
+        # The seeded instance SMTP settings (InstanceSettingsSeeder) use coolify-mail:1025.
+        aliases:
+          - coolify-mail
 
   minio:
     profiles: ["minio"]
@@ -181,7 +193,10 @@ services:
     volumes:
       - minio_data:/data
     networks:
-      - coolify
+      coolify:
+        # The seeded "Local MinIO" storage (S3StorageSeeder) uses http://coolify-minio:9000.
+        aliases:
+          - coolify-minio
 
   minio-init:
     profiles: ["minio"]

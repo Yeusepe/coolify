@@ -6,6 +6,7 @@ use App\Models\InstanceSettings;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Once;
 use Livewire\Livewire;
 
 uses(RefreshDatabase::class);
@@ -20,9 +21,9 @@ function passkeyUser(): User
 }
 
 beforeEach(function () {
-    config(['app.maintenance.store' => 'array', 'passkeys.relying_party_id' => 'coolify.example.com',
-        'passkeys.allowed_origins' => ['https://coolify.example.com']]);
-    InstanceSettings::forceCreate(['id' => 0, 'is_registration_enabled' => false]);
+    config(['app.maintenance.store' => 'array', 'app.url' => 'https://coolify.example.com']);
+    InstanceSettings::forceCreate(['id' => 0, 'is_registration_enabled' => false, 'fqdn' => 'https://coolify.example.com']);
+    Once::flush();
 });
 
 it('requires a signed in user to manage passkeys', function () {
@@ -36,7 +37,7 @@ it('requires recent password confirmation before passkey enrollment', function (
 });
 
 it('uses the configured hostname and requires device user verification', function () {
-    $this->getJson('/passkeys/login/options')
+    $this->getJson('https://coolify.example.com/passkeys/login/options')
         ->assertJsonPath('options.rpId', 'coolify.example.com')
         ->assertJsonPath('options.userVerification', 'required')
         ->assertSessionHas('passkey.verification_options');
@@ -46,7 +47,7 @@ it('allows confirmed users to request enrollment options for their own account',
     $user = passkeyUser();
 
     $this->actingAs($user)->withSession(['auth.password_confirmed_at' => now()->timestamp])
-        ->getJson('/user/passkeys/options')
+        ->getJson('https://coolify.example.com/user/passkeys/options')
         ->assertJsonPath('options.rp.id', 'coolify.example.com')
         ->assertJsonPath('options.user.name', $user->email)
         ->assertSessionHas('passkey.registration_options');

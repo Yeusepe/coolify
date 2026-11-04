@@ -77,7 +77,7 @@ test('read-only member can view an existing scheduled task', function () {
     session(['currentTeam' => $this->team]);
     bindApplicationScheduledTaskRoute($this->application, $this->task);
 
-    Livewire::test(Show::class)
+    Livewire::test(Show::class, ['resource' => $this->application, 'task' => $this->task])
         ->assertSuccessful()
         ->assertSet('name', 'validate-benign')
         ->assertSet('command', 'Hidden (only admins can view)')
@@ -91,7 +91,7 @@ test('the private syncData helper is not remotely callable through Livewire', fu
 
     $original = originalScheduledTaskState($this->task);
 
-    $component = Livewire::test(Show::class)
+    $component = Livewire::test(Show::class, ['resource' => $this->application, 'task' => $this->task])
         ->set('name', 'member-edited')
         ->set('command', 'echo member-edited')
         ->set('frequency', '* * * * *')
@@ -111,7 +111,7 @@ test('read-only member cannot persist scheduled task changes through submit', fu
 
     $original = originalScheduledTaskState($this->task);
 
-    Livewire::test(Show::class)
+    Livewire::test(Show::class, ['resource' => $this->application, 'task' => $this->task])
         ->set('name', 'member-edited')
         ->set('command', 'echo member-edited')
         ->set('frequency', '* * * * *')
@@ -163,7 +163,7 @@ test('admin can persist scheduled task changes through submit', function () {
     session(['currentTeam' => $this->team]);
     bindApplicationScheduledTaskRoute($this->application, $this->task);
 
-    Livewire::test(Show::class)
+    Livewire::test(Show::class, ['resource' => $this->application, 'task' => $this->task])
         ->set('name', 'updated-by-admin')
         ->set('command', 'echo admin-ok')
         ->set('frequency', '0 1 * * *')

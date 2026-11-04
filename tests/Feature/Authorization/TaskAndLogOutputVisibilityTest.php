@@ -75,7 +75,7 @@ function scheduledTaskComponents(): array
     });
 
     return [
-        Livewire::test(Show::class),
+        Livewire::test(Show::class, ['resource' => test()->application, 'task' => test()->task]),
         Livewire::test(Executions::class, ['taskId' => test()->task->id])->call('selectTask', test()->execution->id),
     ];
 }

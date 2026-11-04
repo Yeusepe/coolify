@@ -2,8 +2,10 @@
 
 namespace App\Policies;
 
+use App\Enums\AccessLevel;
 use App\Models\Server;
 use App\Models\User;
+use App\Services\Access\AccessResolver;
 
 class ServerPolicy
 {
@@ -24,6 +26,14 @@ class ServerPolicy
     }
 
     /**
+     * Determine whether the user can read the shared variables of the server (team-wide read).
+     */
+    public function viewSharedVariables(User $user, Server $server): bool
+    {
+        return app(AccessResolver::class)->allowsTeamWide($user, AccessLevel::Read, $server->team_id);
+    }
+
+    /**
      * Determine whether the user can create models.
      */
     public function create(User $user): bool
@@ -37,6 +47,16 @@ class ServerPolicy
     public function update(User $user, Server $server): bool
     {
         return $user->isAdminOfTeam($server->team_id);
+    }
+
+    /**
+     * Determine whether the user can transfer the server to another Coolify instance.
+     *
+     * A transfer sends every secret of the server, also locked environment variables, to the target, so only owners may start it.
+     */
+    public function transfer(User $user, Server $server): bool
+    {
+        return $user->roleInTeam($server->team_id) === 'owner';
     }
 
     /**

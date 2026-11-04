@@ -58,7 +58,7 @@ test('StandaloneDocker::databases() includes attached clickhouse', function () {
 });
 
 test('StandaloneDocker::databases() includes attached sqlite', function () {
-    attachDb(StandaloneSqlite::class, [], $this->destination, $this->environment);
+    attachDb(StandaloneSqlite::class, ['image' => 'peakimages/sqlite:3.54.1-v0.2.0'], $this->destination, $this->environment);
 
     expect($this->destination->databases()->count())->toBe(1);
     expect($this->destination->attachedTo())->toBeTrue();
@@ -73,7 +73,7 @@ test('StandaloneDocker::databases() includes all 9 standalone database types', f
     attachDb(StandaloneKeydb::class, ['keydb_password' => 'pw'], $this->destination, $this->environment);
     attachDb(StandaloneDragonfly::class, ['dragonfly_password' => 'pw'], $this->destination, $this->environment);
     attachDb(StandaloneClickhouse::class, ['clickhouse_admin_password' => 'pw'], $this->destination, $this->environment);
-    attachDb(StandaloneSqlite::class, [], $this->destination, $this->environment);
+    attachDb(StandaloneSqlite::class, ['image' => 'peakimages/sqlite:3.54.1-v0.2.0'], $this->destination, $this->environment);
 
     expect($this->destination->databases()->count())->toBe(9);
     expect($this->destination->attachedTo())->toBeTrue();

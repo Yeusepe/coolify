@@ -29,6 +29,12 @@ class Create extends Component
 
     public string $endpoint = '';
 
+    public bool $usePathStyleEndpoint = true;
+
+    public bool $usePathStyleEndpointChanged = false;
+
+    public bool $skipTlsVerification = false;
+
     public array $endpointParts = ['scheme' => 'https', 'host' => '', 'port' => '', 'path' => ''];
 
     public bool $endpointPartsChanged = false;
@@ -45,6 +51,8 @@ class Create extends Component
             'secret' => 'required|max:255',
             'bucket' => ['required', new ValidS3BucketName],
             'endpoint' => ['required', 'max:255', new SafeWebhookUrl],
+            'usePathStyleEndpoint' => 'boolean',
+            'skipTlsVerification' => 'boolean',
         ];
     }
 
@@ -74,6 +82,8 @@ class Create extends Component
         'secret' => 'Secret',
         'bucket' => 'Bucket',
         'endpoint' => 'Endpoint',
+        'usePathStyleEndpoint' => 'Use path-style URLs',
+        'skipTlsVerification' => 'Skip TLS certificate verification',
     ];
 
     public function submit()
@@ -93,6 +103,8 @@ class Create extends Component
             $this->storage->key = $this->key;
             $this->storage->secret = $this->secret;
             $this->storage->bucket = $this->bucket;
+            $this->storage->use_path_style_endpoint = $this->usePathStyleEndpoint;
+            $this->storage->skip_tls_verification = $this->skipTlsVerification;
             if (empty($this->endpoint)) {
                 $this->storage->endpoint = "https://s3.{$this->region}.amazonaws.com";
             } else {
@@ -112,6 +124,14 @@ class Create extends Component
     public function updatedEndpointParts(): void
     {
         $this->endpointPartsChanged = true;
+        if (! $this->usePathStyleEndpointChanged) {
+            $this->usePathStyleEndpoint = S3Storage::detectPathStyleEndpoint(DomainUrlParts::compose(...$this->endpointParts));
+        }
+    }
+
+    public function updatedUsePathStyleEndpoint(): void
+    {
+        $this->usePathStyleEndpointChanged = true;
     }
 
     private function connectionErrorDescription(\Throwable $exception): string

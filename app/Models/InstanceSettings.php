@@ -21,12 +21,15 @@ class InstanceSettings extends Model
         'public_port_max',
         'do_not_track',
         'is_auto_update_enabled',
+        'is_backup_before_update_enabled',
         'is_registration_enabled',
         'disable_registration_when_oauth_enabled',
         'next_channel',
         'smtp_enabled',
         'smtp_from_address',
         'smtp_from_name',
+        'notification_from_address',
+        'notification_from_name',
         'smtp_recipients',
         'smtp_host',
         'smtp_port',
@@ -45,6 +48,9 @@ class InstanceSettings extends Model
         'allowed_ips',
         'auto_update_frequency',
         'update_check_frequency',
+        'update_channel',
+        'update_custom_tag',
+        'previous_update_channel',
         'new_version_available',
         'instance_timezone',
         'helper_version',
@@ -58,12 +64,16 @@ class InstanceSettings extends Model
         'avatar_storage_type',
         'avatar_s3_storage_id',
         'image_cdn_url',
+        'file_download_s3_storage_id',
         'is_dashboard_force_https_enabled',
+        'is_passkey_enabled',
     ];
 
     protected $hidden = [
         'smtp_from_address',
         'smtp_from_name',
+        'notification_from_address',
+        'notification_from_name',
         'smtp_recipients',
         'smtp_host',
         'smtp_username',
@@ -77,6 +87,8 @@ class InstanceSettings extends Model
         'smtp_enabled' => 'boolean',
         'smtp_from_address' => 'encrypted',
         'smtp_from_name' => 'encrypted',
+        'notification_from_address' => 'encrypted',
+        'notification_from_name' => 'encrypted',
         'smtp_recipients' => 'encrypted',
         'smtp_host' => 'encrypted',
         'smtp_port' => 'integer',
@@ -90,6 +102,7 @@ class InstanceSettings extends Model
 
         'allowed_ip_ranges' => 'array',
         'is_auto_update_enabled' => 'boolean',
+        'is_backup_before_update_enabled' => 'boolean',
         'is_registration_enabled' => 'boolean',
         'disable_registration_when_oauth_enabled' => 'boolean',
         'auto_update_frequency' => 'string',
@@ -100,6 +113,10 @@ class InstanceSettings extends Model
         'webhook_allowed_internal_hosts' => 'array',
         'webhook_allow_localhost' => 'boolean',
         'is_dashboard_force_https_enabled' => 'boolean',
+        'is_passkey_enabled' => 'boolean',
+        'server_validation_rate_limit_seconds' => 'integer',
+        'server_validation_max_failures_per_ip' => 'integer',
+        'server_validation_max_failures_per_team' => 'integer',
     ];
 
     protected static function booted(): void
@@ -133,6 +150,28 @@ class InstanceSettings extends Model
     public static function randomAutoUpdateFrequency(): string
     {
         return random_int(0, 59).' 0 * * *';
+    }
+
+    /**
+     * After a switch to a more stable channel, the instance keeps the updates of the channel it left until the stable release of its version is out.
+     */
+    public function switchUpdateChannel(string $channel): void
+    {
+        $from = $this->getOriginal('update_channel');
+        $this->update_channel = $channel;
+        if ($channel === $from) {
+            return;
+        }
+
+        $channels = ['stable', 'preview', 'nightly'];
+        $fromRank = array_search($from, $channels, true);
+        $toRank = array_search($channel, $channels, true);
+        $followed = $this->getOriginal('previous_update_channel');
+        $this->previous_update_channel = match (true) {
+            $fromRank === false || $toRank === false || $toRank >= $fromRank => null,
+            array_search($followed, $channels, true) > $fromRank => $followed,
+            default => $from,
+        };
     }
 
     public function isPasswordRegistrationAllowed(): bool

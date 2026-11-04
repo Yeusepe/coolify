@@ -3,6 +3,8 @@
 namespace App\Actions\Service;
 
 use App\Actions\Shared\EnsureContentFilesOnServer;
+use App\Events\ServiceStartFinished;
+use App\Jobs\NotifyResourceStoppedJob;
 use App\Models\ServiceApplication;
 use App\Models\ServiceDatabase;
 use Lorisleiva\Actions\Concerns\AsAction;
@@ -18,8 +20,10 @@ class DeployServiceApplication
     {
         $service = $serviceApplication->service;
         $composeServiceName = $serviceApplication->name;
+        NotifyResourceStoppedJob::expectStop($serviceApplication);
 
         $service->parse();
+        StartService::queueFileStorageSync($service);
         $service->saveComposeConfigs();
         $service->isConfigurationChanged(save: true);
 
@@ -39,7 +43,7 @@ class DeployServiceApplication
 
         if ($pullLatestImages) {
             $commands->push('echo Pulling image for service.');
-            $commands->push("docker compose --project-directory {$safeWorkdir} -f {$safeComposeFile} --project-name {$safeProjectName} pull {$safeComposeServiceName} < /dev/null");
+            $commands->push(serverDockerConfigPrefix($service->server)."docker compose --project-directory {$safeWorkdir} -f {$safeComposeFile} --project-name {$safeProjectName} pull {$safeComposeServiceName} < /dev/null");
         }
 
         if ($service->networks()->count() > 0) {
@@ -48,7 +52,7 @@ class DeployServiceApplication
         }
 
         $connectToPredefinedNetwork = (bool) data_get($service, 'connect_to_docker_network');
-        $upCommand = "docker compose --project-directory {$safeWorkdir} -f {$safeComposeFile} --project-name {$safeProjectName} up -d --no-deps";
+        $upCommand = serverDockerConfigPrefix($service->server)."docker compose --project-directory {$safeWorkdir} -f {$safeComposeFile} --project-name {$safeProjectName} up -d --no-deps";
         if ($forceRebuild) {
             $upCommand .= ' --build';
         }
@@ -57,6 +61,7 @@ class DeployServiceApplication
         }
         // No stdin for Compose prompts: they would read the next script lines (see StartService).
         $upCommand .= " {$safeComposeServiceName} < /dev/null";
+        $commands->push(...StartService::removeContainersWithRemovedVolumesCommands($service, $composeServiceName));
         $commands->push('echo Starting service container.');
         $commands->push($upCommand);
 
@@ -71,6 +76,6 @@ class DeployServiceApplication
 
         $commands->push("docker network connect {$safeProjectName} coolify-proxy >/dev/null 2>&1 || true");
 
-        return remote_process($commands->toArray(), $service->server, type_uuid: $service->uuid, callEventOnFinish: 'ServiceStartFinished', callEventData: $service->id, queue: deployment_queue());
+        return remote_process($commands->toArray(), $service->server, type_uuid: $service->uuid, callEventOnFinish: 'ServiceStartFinished', callEventData: ServiceStartFinished::dataFor($service), queue: deployment_queue());
     }
 }

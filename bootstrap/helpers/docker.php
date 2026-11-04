@@ -507,6 +507,89 @@ function dockerRemoveCommand(string $container): string
     return dockerCommandIgnoringError($command, 'No such container:');
 }
 
+/**
+ * Lists the containers of a Compose project, one JSON object per line, for composeContainersWithRemovedVolumes().
+ */
+function composeProjectMountsCommand(string $projectName): string
+{
+    $format = '{"name":{{json .Name}},"service":{{json (index .Config.Labels "com.docker.compose.service")}},"imageVolumes":{{json .Config.Volumes}},"mounts":{{json .Mounts}}}';
+
+    return 'docker ps -aq --filter '.escapeshellarg("label=com.docker.compose.project={$projectName}")
+        .' | xargs -r docker inspect --format '.escapeshellarg($format).' 2>/dev/null || true';
+}
+
+/**
+ * `docker compose up` gives a recreated container the mount of the old container at each path
+ * that the image declares with VOLUME. This also keeps a volume that the user deleted in Coolify,
+ * so its old data comes back (#6875). Returns the containers to remove before `up`.
+ *
+ * Only a volume that Coolify made (its name starts with "{uuid}_") and that has no storage row
+ * anymore counts. A volume that is only removed from the Compose file still has its row, and an
+ * external volume or a bind mount is not Coolify's, so Compose keeps using them as before.
+ *
+ * @param  string  $projectMounts  output of composeProjectMountsCommand()
+ * @param  array<string, mixed>  $composeServices  the services of the Compose file that `up` starts
+ * @param  list<string>  $storageNames  names of the storage rows that the resource still has
+ * @return array<string, string> container name => volume that the user deleted
+ */
+function composeContainersWithRemovedVolumes(string $projectMounts, array $composeServices, string $uuid, array $storageNames): array
+{
+    $normalize = fn (string $path): string => rtrim($path, '/') ?: '/';
+    $containers = [];
+    foreach (preg_split('/\R/', trim($projectMounts)) as $line) {
+        $container = json_decode($line, true);
+        $service = data_get($container, 'service');
+        if (! is_array($container) || ! is_string($service) || ! is_array(data_get($composeServices, $service))) {
+            continue;
+        }
+        $targets = composeServiceVolumeTargets(data_get($composeServices, "{$service}.volumes", []));
+        if ($targets === null) {
+            continue;
+        }
+        $imageVolumes = array_map($normalize, array_keys(data_get($container, 'imageVolumes') ?? []));
+        foreach (data_get($container, 'mounts') ?? [] as $mount) {
+            $name = (string) data_get($mount, 'Name');
+            $path = $normalize((string) data_get($mount, 'Destination'));
+            if (data_get($mount, 'Type') !== 'volume' || ! str_starts_with($name, "{$uuid}_") || in_array($name, $storageNames, true)
+                || ! in_array($path, $imageVolumes, true) || in_array($path, $targets, true)) {
+                continue;
+            }
+            $containers[ltrim((string) data_get($container, 'name'), '/')] = $name;
+        }
+    }
+
+    return $containers;
+}
+
+/**
+ * The container paths of the volumes of a Compose service, or null when a path is not literal
+ * (for example `${DATA_PATH}`).
+ *
+ * @return list<string>|null
+ */
+function composeServiceVolumeTargets(mixed $volumes): ?array
+{
+    $targets = [];
+    foreach (is_array($volumes) ? $volumes : [] as $volume) {
+        if (is_array($volume)) {
+            $target = data_get($volume, 'target');
+        } else {
+            // source:target:mode, where the source can contain colons, for example ${DATA:-/data}.
+            $parts = explode(':', (string) $volume);
+            if (count($parts) > 1 && preg_match('/^[a-zA-Z,]+$/', end($parts))) {
+                array_pop($parts);
+            }
+            $target = end($parts);
+        }
+        if (! is_string($target) || ! str_starts_with($target, '/')) {
+            return null;
+        }
+        $targets[] = rtrim($target, '/') ?: '/';
+    }
+
+    return $targets;
+}
+
 function dockerNetworkRemoveCommand(string $network): string
 {
     $command = 'docker network rm '.escapeShellValue($network);
@@ -524,6 +607,20 @@ function dockerCommandIgnoringError(string $command, string $ignoredError): stri
 function escapeShellValue(string $value): string
 {
     return "'".str_replace("'", "'\\''", $value)."'";
+}
+
+/**
+ * Prefix for a Docker command that pulls on the server itself, outside the helper container. It makes the CLI use
+ * the SSH user's Docker config, where the registry logins are and which the helper container mounts. On a non-root
+ * server the command runs with sudo, which resets HOME to /root, so without it a private image pull is anonymous.
+ * The SSH user's shell expands $HOME before sudo runs. Without a config of the SSH user, DOCKER_CONFIG is empty and
+ * the CLI keeps /root/.docker, so a login made with `sudo docker login` still works. DOCKER_CONTEXT=default keeps the
+ * pull on the host daemon if that config selects another context, because the next commands use the host daemon.
+ */
+function serverDockerConfigPrefix(Server $server): string
+{
+    // No && or pipe: with them, the sudo parser can wrap the line in `sudo bash -c`, where $HOME is /root.
+    return $server->isNonRoot() ? 'DOCKER_CONTEXT=default DOCKER_CONFIG="$(find "$HOME/.docker/config.json" -maxdepth 0 -exec dirname {} \\; 2>/dev/null)" ' : '';
 }
 
 function executeInDocker(string $containerId, string $command)
@@ -774,7 +871,20 @@ function isNoindexDomain(string $domain, ?Collection $noindex_domains): bool
         ->contains($normalize($domain));
 }
 
-function fqdnLabelsForCaddy(string $network, string $uuid, Collection $domains, bool $is_force_https_enabled = false, $onlyPort = null, ?Collection $serviceLabels = null, ?bool $is_gzip_enabled = true, ?bool $is_stripprefix_enabled = true, ?string $service_name = null, ?string $image = null, string $redirect_direction = 'both', ?string $predefinedPort = null, bool $is_http_basic_auth_enabled = false, ?string $http_basic_auth_username = null, ?string $http_basic_auth_password = null, ?Collection $noindex_domains = null, bool $is_traffic_analytics_enabled = false, array $domainPortOverrides = [], bool $supports_log_append = false, bool $supports_basic_auth_directive = false, bool $is_permanent_redirect_enabled = false)
+/**
+ * Caddy site address of a domain. Maintenance blocks in the base Caddyfile must use the same
+ * address as the labels, so caddy-docker-proxy merges them into one site block.
+ */
+function caddySiteAddress(string $scheme, string $host, bool $isForceHttpsEnabled): string
+{
+    if ($scheme === 'https' && ! $isForceHttpsEnabled) {
+        return "http://{$host}, https://{$host}";
+    }
+
+    return "{$scheme}://{$host}";
+}
+
+function fqdnLabelsForCaddy(string $network, string $uuid, Collection $domains, bool $is_force_https_enabled = false, $onlyPort = null, ?Collection $serviceLabels = null, ?bool $is_gzip_enabled = true, ?bool $is_stripprefix_enabled = true, ?string $service_name = null, ?string $image = null, string $redirect_direction = 'both', ?string $predefinedPort = null, bool $is_http_basic_auth_enabled = false, ?string $http_basic_auth_username = null, ?string $http_basic_auth_password = null, ?Collection $noindex_domains = null, bool $is_traffic_analytics_enabled = false, array $domainPortOverrides = [], bool $supports_log_append = false, bool $supports_basic_auth_directive = false, ?int $http_basic_auth_bcrypt_cost = null, array $http_basic_auth_argon2id_options = [], bool $is_permanent_redirect_enabled = false)
 {
     $labels = collect([]);
     if ($serviceLabels) {
@@ -785,7 +895,9 @@ function fqdnLabelsForCaddy(string $network, string $uuid, Collection $domains, 
 
     $is_http_basic_auth_enabled = $is_http_basic_auth_enabled && $http_basic_auth_username !== null && $http_basic_auth_password !== null;
     if ($is_http_basic_auth_enabled) {
-        $hashedPassword = password_hash($http_basic_auth_password, PASSWORD_BCRYPT, ['cost' => 10]);
+        $hashedPassword = $http_basic_auth_argon2id_options
+            ? password_hash($http_basic_auth_password, PASSWORD_ARGON2ID, $http_basic_auth_argon2id_options)
+            : password_hash($http_basic_auth_password, PASSWORD_BCRYPT, ['cost' => $http_basic_auth_bcrypt_cost ?? 10]);
     }
 
     $trafficAppKey = caddyTrafficAppKey($uuid, $service_name);
@@ -796,10 +908,7 @@ function fqdnLabelsForCaddy(string $network, string $uuid, Collection $domains, 
         $path = $url->getPath();
         $host_without_www = str($host)->replace('www.', '');
         $schema = $url->getScheme();
-        $siteAddress = "{$schema}://{$host}";
-        if ($schema === 'https' && ! $is_force_https_enabled) {
-            $siteAddress = "http://{$host}, https://{$host}";
-        }
+        $siteAddress = caddySiteAddress($schema, $host, $is_force_https_enabled);
         $portlessDomain = ServiceApplication::withoutPort($domain);
         $port = $url->getPort() ?? ($domainPortOverrides[$portlessDomain] ?? null);
         $handle = 'handle_path';
@@ -828,6 +937,7 @@ function fqdnLabelsForCaddy(string $network, string $uuid, Collection $domains, 
         } else {
             $labels->push("caddy_{$loop}.{$handle}.{$loop}_reverse_proxy={{upstreams}}");
         }
+        $labels->push("caddy_{$loop}.{$handle}.{$loop}_reverse_proxy.stream_close_delay=".CADDY_STREAM_CLOSE_DELAY);
         $labels->push("caddy_{$loop}.{$handle}={$path}*");
         if ($is_gzip_enabled) {
             $labels->push("caddy_{$loop}.encode=zstd gzip");
@@ -843,6 +953,9 @@ function fqdnLabelsForCaddy(string $network, string $uuid, Collection $domains, 
         if ($is_http_basic_auth_enabled) {
             // Caddy 2.8 renamed basicauth to basic_auth; see Server::caddySupportsBasicAuthDirective().
             $basicAuthDirective = $supports_basic_auth_directive ? 'basic_auth' : 'basicauth';
+            if ($http_basic_auth_argon2id_options) {
+                $labels->push("caddy_{$loop}.{$basicAuthDirective}=argon2id");
+            }
             $labels->push("caddy_{$loop}.{$basicAuthDirective}.{$http_basic_auth_username}=\"{$hashedPassword}\"");
         }
         if ($is_traffic_analytics_enabled) {
@@ -929,7 +1042,7 @@ function traefikHostRulesWithoutIpv6Brackets(Collection $labels): Collection
     ) : $label);
 }
 
-function fqdnLabelsForTraefik(string $uuid, Collection $domains, bool $is_force_https_enabled = false, $onlyPort = null, ?Collection $serviceLabels = null, ?bool $is_gzip_enabled = true, ?bool $is_stripprefix_enabled = true, ?string $service_name = null, bool $generate_unique_uuid = false, ?string $image = null, string $redirect_direction = 'both', bool $is_http_basic_auth_enabled = false, ?string $http_basic_auth_username = null, ?string $http_basic_auth_password = null, ?Collection $noindex_domains = null, bool $escape_redirect_replacement_for_compose = true, array $domainPortOverrides = [], ?string $certificate_resolver = 'letsencrypt', bool $is_permanent_redirect_enabled = false)
+function fqdnLabelsForTraefik(string $uuid, Collection $domains, bool $is_force_https_enabled = false, $onlyPort = null, ?Collection $serviceLabels = null, ?bool $is_gzip_enabled = true, ?bool $is_stripprefix_enabled = true, ?string $service_name = null, bool $generate_unique_uuid = false, ?string $image = null, string $redirect_direction = 'both', bool $is_http_basic_auth_enabled = false, ?string $http_basic_auth_username = null, ?string $http_basic_auth_password = null, ?Collection $noindex_domains = null, bool $escape_redirect_replacement_for_compose = true, array $domainPortOverrides = [], ?string $certificate_resolver = 'letsencrypt', ?int $http_basic_auth_bcrypt_cost = null, bool $is_permanent_redirect_enabled = false)
 {
     $labels = collect([]);
     $labels->push('traefik.enable=true');
@@ -951,7 +1064,7 @@ function fqdnLabelsForTraefik(string $uuid, Collection $domains, bool $is_force_
     $is_http_basic_auth_enabled = $is_http_basic_auth_enabled && $http_basic_auth_username !== null && $http_basic_auth_password !== null;
     $http_basic_auth_label = "http-basic-auth-{$uuid}";
     if ($is_http_basic_auth_enabled) {
-        $hashedPassword = password_hash($http_basic_auth_password, PASSWORD_BCRYPT, ['cost' => 10]);
+        $hashedPassword = password_hash($http_basic_auth_password, PASSWORD_BCRYPT, ['cost' => $http_basic_auth_bcrypt_cost ?? 10]);
     }
 
     if ($is_http_basic_auth_enabled) {
@@ -1222,6 +1335,10 @@ function generateLabelsApplication(Application $application, ?ApplicationPreview
         $appUuid = $appUuid.'-pr-'.$pull_request_id;
     }
     $labels = collect([]);
+    $httpBasicAuthArgon2idOptions = $application->usesArgon2idBasicAuth() ? [
+        'memory_cost' => $application->http_basic_auth_argon2id_memory_cost,
+        'time_cost' => $application->http_basic_auth_argon2id_time_cost,
+    ] : [];
     if ($pull_request_id === 0) {
         if ($application->fqdn) {
             $domains = str(data_get($application, 'fqdn'))->explode(',');
@@ -1242,6 +1359,7 @@ function generateLabelsApplication(Application $application, ?ApplicationPreview
                             is_http_basic_auth_enabled: $application->is_http_basic_auth_enabled,
                             http_basic_auth_username: $application->http_basic_auth_username,
                             http_basic_auth_password: $application->http_basic_auth_password,
+                            http_basic_auth_bcrypt_cost: $application->http_basic_auth_bcrypt_cost,
                             noindex_domains: $noindexDomains,
                             domainPortOverrides: $application->domain_port_overrides ?? [],
                             certificate_resolver: $application->destination->server->traefikCertificateResolver($application->settings?->traefik_certificate_resolver),
@@ -1261,6 +1379,8 @@ function generateLabelsApplication(Application $application, ?ApplicationPreview
                             is_http_basic_auth_enabled: $application->is_http_basic_auth_enabled,
                             http_basic_auth_username: $application->http_basic_auth_username,
                             http_basic_auth_password: $application->http_basic_auth_password,
+                            http_basic_auth_bcrypt_cost: $application->http_basic_auth_bcrypt_cost,
+                            http_basic_auth_argon2id_options: $httpBasicAuthArgon2idOptions,
                             noindex_domains: $noindexDomains,
                             is_traffic_analytics_enabled: $application->destination->server->isTrafficAnalyticsEnabled(),
                             supports_log_append: $application->destination->server->caddySupportsLogAppend(),
@@ -1282,6 +1402,7 @@ function generateLabelsApplication(Application $application, ?ApplicationPreview
                     is_http_basic_auth_enabled: $application->is_http_basic_auth_enabled,
                     http_basic_auth_username: $application->http_basic_auth_username,
                     http_basic_auth_password: $application->http_basic_auth_password,
+                    http_basic_auth_bcrypt_cost: $application->http_basic_auth_bcrypt_cost,
                     noindex_domains: $noindexDomains,
                     escape_redirect_replacement_for_compose: false,
                     domainPortOverrides: $application->domain_port_overrides ?? [],
@@ -1300,6 +1421,8 @@ function generateLabelsApplication(Application $application, ?ApplicationPreview
                     is_http_basic_auth_enabled: $application->is_http_basic_auth_enabled,
                     http_basic_auth_username: $application->http_basic_auth_username,
                     http_basic_auth_password: $application->http_basic_auth_password,
+                    http_basic_auth_bcrypt_cost: $application->http_basic_auth_bcrypt_cost,
+                    http_basic_auth_argon2id_options: $httpBasicAuthArgon2idOptions,
                     noindex_domains: $noindexDomains,
                     is_traffic_analytics_enabled: $application->destination->server->isTrafficAnalyticsEnabled(),
                     supports_log_append: $application->destination->server->caddySupportsLogAppend(),
@@ -1331,6 +1454,7 @@ function generateLabelsApplication(Application $application, ?ApplicationPreview
                         is_http_basic_auth_enabled: $application->is_http_basic_auth_enabled,
                         http_basic_auth_username: $application->http_basic_auth_username,
                         http_basic_auth_password: $application->http_basic_auth_password,
+                        http_basic_auth_bcrypt_cost: $application->http_basic_auth_bcrypt_cost,
                         noindex_domains: $noindexDomains,
                         escape_redirect_replacement_for_compose: false,
                         domainPortOverrides: $preview->domain_port_overrides ?? [],
@@ -1350,6 +1474,8 @@ function generateLabelsApplication(Application $application, ?ApplicationPreview
                         is_http_basic_auth_enabled: $application->is_http_basic_auth_enabled,
                         http_basic_auth_username: $application->http_basic_auth_username,
                         http_basic_auth_password: $application->http_basic_auth_password,
+                        http_basic_auth_bcrypt_cost: $application->http_basic_auth_bcrypt_cost,
+                        http_basic_auth_argon2id_options: $httpBasicAuthArgon2idOptions,
                         noindex_domains: $noindexDomains,
                         is_traffic_analytics_enabled: $application->destination->server->isTrafficAnalyticsEnabled(),
                         supports_log_append: $application->destination->server->caddySupportsLogAppend(),
@@ -1370,6 +1496,7 @@ function generateLabelsApplication(Application $application, ?ApplicationPreview
                 is_http_basic_auth_enabled: $application->is_http_basic_auth_enabled,
                 http_basic_auth_username: $application->http_basic_auth_username,
                 http_basic_auth_password: $application->http_basic_auth_password,
+                http_basic_auth_bcrypt_cost: $application->http_basic_auth_bcrypt_cost,
                 noindex_domains: $noindexDomains,
                 escape_redirect_replacement_for_compose: false,
                 domainPortOverrides: $preview->domain_port_overrides ?? [],
@@ -1387,6 +1514,8 @@ function generateLabelsApplication(Application $application, ?ApplicationPreview
                 is_http_basic_auth_enabled: $application->is_http_basic_auth_enabled,
                 http_basic_auth_username: $application->http_basic_auth_username,
                 http_basic_auth_password: $application->http_basic_auth_password,
+                http_basic_auth_bcrypt_cost: $application->http_basic_auth_bcrypt_cost,
+                http_basic_auth_argon2id_options: $httpBasicAuthArgon2idOptions,
                 noindex_domains: $noindexDomains,
                 is_traffic_analytics_enabled: $application->destination->server->isTrafficAnalyticsEnabled(),
                 supports_log_append: $application->destination->server->caddySupportsLogAppend(),
@@ -1752,6 +1881,27 @@ function convertDockerRunToCompose(?string $custom_docker_run_options = null)
         }
     }
 
+    // Short interactive/TTY flags (-i, -t, -it, -ti) and their long forms are not matched by
+    // the long-option regex above. Map them to compose so a single-image app can keep STDIN
+    // open (docker -i) and/or allocate a TTY (docker -t) — required for `docker attach` to an
+    // interactive main process, e.g. game-server consoles.
+    // Keep quoted option values together so flags inside an entrypoint are not options.
+    preg_match_all('/(?:[^\\s\'"\\\\]+|\\\\.|"(?:\\\\.|[^"\\\\])*"|\'(?:\\\\.|[^\'\\\\])*\')+/', (string) $custom_docker_run_options, $tokens);
+    foreach ($tokens[0] as $token) {
+        if ($token === '--interactive') {
+            $compose_options->put('stdin_open', true);
+        } elseif ($token === '--tty') {
+            $compose_options->put('tty', true);
+        } elseif (preg_match('/^-[dit]+$/', $token)) {
+            if (str_contains($token, 'i')) {
+                $compose_options->put('stdin_open', true);
+            }
+            if (str_contains($token, 't')) {
+                $compose_options->put('tty', true);
+            }
+        }
+    }
+
     return $compose_options->toArray();
 }
 
@@ -1767,6 +1917,10 @@ function unsupportedDockerRunOptions(?string $custom_docker_run_options): array
     $unsupported = [];
     foreach ($words[0] as $word) {
         if (! str_starts_with($word, '-') || preg_match('/^-\d/', $word)) {
+            continue;
+        }
+        // convertDockerRunToCompose() maps these outside DOCKER_RUN_OPTION_MAPPING
+        if (preg_match('/^(-[dit]+|--interactive|--tty)$/', $word)) {
             continue;
         }
         $option = str_starts_with($word, '--') ? '--'.ltrim(strtok($word, '='), '-') : strtok($word, '=');
@@ -2054,7 +2208,7 @@ function generateDockerBuildArgs($variables): Collection
 /**
  * Generate Docker environment flags from environment variables collection
  *
- * @param  Collection|array  $variables  Collection of variables with 'key', 'value', and optionally 'is_multiline'
+ * @param  Collection|array  $variables  Collection of variables with 'key' and 'value'
  * @return string Space-separated environment flags
  */
 function generateDockerEnvFlags($variables): string
@@ -2068,11 +2222,6 @@ function generateDockerEnvFlags($variables): string
 
             if (! ValidationPatterns::isValidEnvironmentVariableKey((string) $key)) {
                 throw new InvalidArgumentException('Invalid environment variable key.');
-            }
-
-            $isMultiline = is_array($var) ? data_get($var, 'is_multiline', false) : ($var->is_multiline ?? false);
-            if ($isMultiline) {
-                $value = trim($value, "'");
             }
 
             return '-e '.escapeshellarg("{$key}={$value}");
@@ -2170,4 +2319,53 @@ function injectDockerComposeBuildArgs(string $command, string $buildArgsString):
     );
 
     return $modifiedCommand ?? $command;
+}
+
+/**
+ * Run a command that uses the Railpack BuildKit builder, then stop the builder when no other
+ * process uses it. An idle buildkitd keeps the memory of earlier builds until it restarts.
+ *
+ * The lock file is in the buildx metadata directory, which all helper containers of a server share.
+ * The script has no `&&`, `||`, pipe, or `$(`, because the sudo parser would put sudo into it.
+ */
+function railpackBuilderLockedScript(string $command): string
+{
+    return 'exec 9>/root/.docker/buildx/coolify-railpack.lock; if flock -s 9; then :; else exit $?; fi; '
+        ."{$command}; status=\$?; "
+        .'if flock -n -x 9; then DOCKER_CONFIG=/root/.docker docker buildx stop coolify-railpack >/dev/null 2>&1; fi; '
+        .'exit $status';
+}
+
+/**
+ * Start the Railpack builder and wait until buildkitd accepts connections. Run it inside
+ * railpackBuilderLockedScript(), so that no other process stops the builder after it starts.
+ *
+ * buildx waits for buildkitd only when it starts the builder itself. A concurrent build that sees
+ * the container already running connects at once and fails while the BuildKit socket is missing.
+ * The lock makes the other builds wait until the first bootstrap is complete.
+ */
+function railpackBuilderBootstrapScript(): string
+{
+    return 'exec 8>/root/.docker/buildx/coolify-railpack-bootstrap.lock; flock -x 8; '
+        .'DOCKER_CONFIG=/root/.docker docker buildx inspect --bootstrap coolify-railpack >/dev/null 2>&1; '
+        .'flock -u 8';
+}
+
+/**
+ * The buildx metadata of a server, as the `docker run -v` source that the deployment helper uses.
+ */
+function railpackBuildxMetadataVolume(Server $server): string
+{
+    return isDev() && $server->isLocalhost() ? 'coolify-buildx' : '$HOME/.docker/buildx';
+}
+
+/**
+ * Run a command for the Railpack builder from a temporary helper container, then stop the builder
+ * when no build uses it.
+ */
+function railpackBuilderHelperCommand(string $buildxMetadataVolume, string $helperImage, string $command): string
+{
+    $script = railpackBuilderLockedScript($command);
+
+    return "docker run --rm -v {$buildxMetadataVolume}:/root/.docker/buildx -v /var/run/docker.sock:/var/run/docker.sock {$helperImage} bash -c '{$script}' 2>/dev/null || true";
 }

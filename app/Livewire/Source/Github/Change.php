@@ -272,6 +272,7 @@ class Change extends Component
             ])->timeout(10)->get("{$this->github_app->api_url}/app");
 
             if (! $appResponse->successful()) {
+                assertGithubClockInSync($appResponse);
                 $error = data_get($appResponse->json(), 'message', 'Unknown error');
                 $this->dispatch('error', "Connection failed: {$error}");
 
@@ -305,7 +306,7 @@ class Change extends Component
             $this->authorize('view', $this->github_app);
             $this->privateKeys = PrivateKey::ownedByCurrentTeamCached();
 
-            $this->applications = $this->github_app->applications;
+            $this->applications = $this->github_app->applications()->whereRelation('environment.project.team', 'id', currentTeam()->id)->get();
             $settings = instanceSettings();
 
             // Sync data from model to properties
@@ -372,14 +373,7 @@ class Change extends Component
 
     public function getGithubAppNameUpdatePath()
     {
-        $name = encodeGithubPathSegment($this->github_app->name);
-        $organization = normalizeGithubOrganization($this->github_app->organization);
-
-        if (filled($organization)) {
-            return rtrim($this->github_app->html_url, '/').'/organizations/'.encodeGithubPathSegment($organization)."/settings/apps/{$name}";
-        }
-
-        return rtrim($this->github_app->html_url, '/')."/settings/apps/{$name}";
+        return $this->github_app->settingsUrl();
     }
 
     public function updateGithubAppName()
@@ -438,6 +432,7 @@ class Change extends Component
             $this->syncData(true);
             $this->github_app->save();
             $this->isConnected = $this->github_app->isConnected();
+            $this->dispatch('name-changed', uuid: $this->github_app->uuid, name: $this->github_app->name);
             $this->dispatch('success', 'Github App updated.');
         } catch (ValidationException $e) {
             throw $e;

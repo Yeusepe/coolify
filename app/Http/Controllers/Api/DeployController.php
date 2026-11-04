@@ -6,6 +6,7 @@ use App\Actions\Application\CleanupCancelledDeployment;
 use App\Actions\Database\StartDatabase;
 use App\Actions\Service\StartService;
 use App\Enums\ApplicationDeploymentStatus;
+use App\Enums\CancelPreviousDeployments;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
 use App\Models\ApplicationDeploymentQueue;
@@ -13,6 +14,7 @@ use App\Models\ApplicationPreview;
 use App\Models\Server;
 use App\Models\Service;
 use App\Models\Tag;
+use App\Services\Access\AccessResolver;
 use App\Support\ResourceStartActivity;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\Request;
@@ -74,7 +76,12 @@ class DeployController extends Controller
         if (is_null($teamId)) {
             return invalidTokenResponse();
         }
-        $deployments_per_server = ApplicationDeploymentQueue::ownedByTeam((int) $teamId)->whereIn('status', ['in_progress', 'queued'])->get()->sortBy('id');
+        $query = ApplicationDeploymentQueue::ownedByTeam((int) $teamId)->whereIn('status', ['in_progress', 'queued']);
+        if (! app(AccessResolver::class)->coversWholeTeam($request->user(), $teamId)) {
+            // application_id is a string column, so compare with string IDs of the applications the actor can see.
+            $query->whereIn('application_id', Application::ownedByCurrentTeamAPI($teamId)->pluck('id')->map(fn ($id) => (string) $id));
+        }
+        $deployments_per_server = $query->get()->sortBy('id');
         $deployments_per_server = $deployments_per_server->map(function ($deployment) {
             return $this->removeSensitiveData($deployment);
         });
@@ -232,6 +239,11 @@ class DeployController extends Controller
         if (! $application || data_get($application->team(), 'id') !== (int) $teamId) {
             return response()->json(['message' => 'You do not have permission to cancel this deployment.'], 403);
         }
+        // For an actor limited by access grants, deployments of applications outside the grants do not exist.
+        // Soft-deleted applications stay included so a deploy that runs during a delete can still be cancelled.
+        if (! app(AccessResolver::class)->coversWholeTeam($request->user(), $teamId)) {
+            $this->authorize('deploy', $application);
+        }
 
         // Check if deployment can be cancelled (must be queued or in_progress)
         $cancellableStatuses = [
@@ -317,6 +329,7 @@ class DeployController extends Controller
             new OA\Parameter(name: 'pr', in: 'query', description: 'Pull Request Id for deploying specific PR builds. Cannot be used with tag parameter.', schema: new OA\Schema(type: 'integer', maximum: 2147483647)),
             new OA\Parameter(name: 'pull_request_id', in: 'query', description: 'Preview deployment identifier. Alias of pr.', schema: new OA\Schema(type: 'integer', maximum: 2147483647)),
             new OA\Parameter(name: 'docker_tag', in: 'query', description: 'Docker image tag for Docker Image preview deployments. Requires pull_request_id.', schema: new OA\Schema(type: 'string')),
+            new OA\Parameter(name: 'cancel_previous', in: 'query', description: 'Cancel the older webhook, API, and MCP deployments of the same application, pull request, and server. `queued` cancels the ones that wait in the queue. `building` also stops the ones that are still building; a deployment that already started to replace containers always finishes. Manual, restart, and rollback deployments are never cancelled. Default: `none`.', schema: new OA\Schema(type: 'string', enum: ['none', 'queued', 'building'], default: 'none')),
         ],
 
         responses: [
@@ -370,7 +383,11 @@ class DeployController extends Controller
         $pullRequestId = $request->input('pull_request_id', $request->input('pr'));
         $pr = $pullRequestId ? max((int) $pullRequestId, 0) : 0;
         $dockerTag = $request->string('docker_tag')->trim()->value() ?: null;
+        $cancelPrevious = CancelPreviousDeployments::tryFrom($request->string('cancel_previous', 'none')->trim()->lower()->value());
 
+        if (! $cancelPrevious) {
+            return response()->json(['message' => 'cancel_previous must be one of: none, queued, building.'], 400);
+        }
         if ($pr > 2147483647) {
             return response()->json(['message' => 'pull_request_id must be between 1 and 2147483647.'], 400);
         }
@@ -387,15 +404,15 @@ class DeployController extends Controller
             return response()->json(['message' => 'You can only use tag or docker_tag, not both.'], 400);
         }
         if ($tags) {
-            return $this->by_tags($tags, $teamId, $force);
+            return $this->by_tags($tags, $teamId, $force, $cancelPrevious);
         } elseif ($uuids) {
-            return $this->by_uuids($uuids, $teamId, $force, $pr, $dockerTag);
+            return $this->by_uuids($uuids, $teamId, $force, $pr, $dockerTag, $cancelPrevious);
         }
 
         return response()->json(['message' => 'You must provide uuid or tag.'], 400);
     }
 
-    private function by_uuids(string $uuid, int $teamId, bool $force = false, int $pr = 0, ?string $dockerTag = null)
+    private function by_uuids(string $uuid, int $teamId, bool $force = false, int $pr = 0, ?string $dockerTag = null, CancelPreviousDeployments $cancelPrevious = CancelPreviousDeployments::NONE)
     {
         $uuids = explode(',', $uuid);
         $uuids = collect(array_filter($uuids));
@@ -423,7 +440,7 @@ class DeployController extends Controller
                         continue;
                     }
                 }
-                $result = $this->deploy_resource($resource, $force, $pr, $dockerTagForResource, $preview?->git_type);
+                $result = $this->deploy_resource($resource, $force, $pr, $dockerTagForResource, $preview?->git_type, $cancelPrevious);
                 if (isset($result['status']) && $result['status'] === 429) {
                     return response()->json(['message' => $result['message']], 429)->header('Retry-After', 60);
                 }
@@ -444,7 +461,7 @@ class DeployController extends Controller
         return response()->json(['message' => 'No resources found.'], 404);
     }
 
-    public function by_tags(string $tags, int $team_id, bool $force = false)
+    public function by_tags(string $tags, int $team_id, bool $force = false, CancelPreviousDeployments $cancelPrevious = CancelPreviousDeployments::NONE)
     {
         $tags = explode(',', $tags);
         $tags = collect(array_filter($tags));
@@ -469,7 +486,7 @@ class DeployController extends Controller
                 continue;
             }
             foreach ($applications as $resource) {
-                $result = $this->deploy_resource($resource, $force);
+                $result = $this->deploy_resource($resource, $force, cancelPrevious: $cancelPrevious);
                 if (isset($result['status']) && $result['status'] === 429) {
                     return response()->json(['message' => $result['message']], 429)->header('Retry-After', 60);
                 }
@@ -496,7 +513,7 @@ class DeployController extends Controller
         return response()->json(['message' => 'No resources found with this tag.'], 404);
     }
 
-    public function deploy_resource($resource, bool $force = false, int $pr = 0, ?string $dockerTag = null, ?string $gitType = null): array
+    public function deploy_resource($resource, bool $force = false, int $pr = 0, ?string $dockerTag = null, ?string $gitType = null, CancelPreviousDeployments $cancelPrevious = CancelPreviousDeployments::NONE): array
     {
         $message = null;
         $deployment_uuid = null;
@@ -523,6 +540,7 @@ class DeployController extends Controller
                     is_api: true,
                     git_type: $gitType,
                     docker_registry_image_tag: $dockerTag,
+                    cancel_previous: $cancelPrevious,
                 );
                 if ($result['status'] === 'queue_full') {
                     return ['message' => $result['message'], 'deployment_uuid' => null, 'status' => 429];

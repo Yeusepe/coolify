@@ -64,7 +64,7 @@ it('filters out null environment variables from nixpacks build command', functio
     $job = Mockery::mock(ApplicationDeploymentJob::class)->makePartial();
     $job->shouldAllowMockingProtectedMethods();
 
-    $reflection = new \ReflectionClass(ApplicationDeploymentJob::class);
+    $reflection = new ReflectionClass(ApplicationDeploymentJob::class);
 
     // Set private properties
     $applicationProperty = $reflection->getProperty('application');
@@ -129,9 +129,10 @@ it('filters out null environment variables from nixpacks preview deployments', f
 
     $previewEnvVars = collect([$envVar1, $envVar2]);
 
-    $mockApplication->shouldReceive('getAttribute')
-        ->with('nixpacks_environment_variables_preview')
+    $mockApplication->shouldReceive('nixpacks_environment_variables_preview->whereNotIn->get')
         ->andReturn($previewEnvVars);
+    $mockApplication->shouldReceive('getAttribute')->with('settings')
+        ->andReturn((object) ['is_pr_deployments_public_enabled' => false]);
 
     // Mock application deployment queue
     $mockQueue = Mockery::mock(ApplicationDeploymentQueue::class);
@@ -141,7 +142,7 @@ it('filters out null environment variables from nixpacks preview deployments', f
     $job = Mockery::mock(ApplicationDeploymentJob::class)->makePartial();
     $job->shouldAllowMockingProtectedMethods();
 
-    $reflection = new \ReflectionClass(ApplicationDeploymentJob::class);
+    $reflection = new ReflectionClass(ApplicationDeploymentJob::class);
 
     // Set private properties
     $applicationProperty = $reflection->getProperty('application');
@@ -206,7 +207,7 @@ it('handles all environment variables being null or empty', function () {
     $job = Mockery::mock(ApplicationDeploymentJob::class)->makePartial();
     $job->shouldAllowMockingProtectedMethods();
 
-    $reflection = new \ReflectionClass(ApplicationDeploymentJob::class);
+    $reflection = new ReflectionClass(ApplicationDeploymentJob::class);
 
     // Set private properties
     $applicationProperty = $reflection->getProperty('application');
@@ -310,7 +311,7 @@ it('preserves environment variables with zero values', function () {
     $job = Mockery::mock(ApplicationDeploymentJob::class)->makePartial();
     $job->shouldAllowMockingProtectedMethods();
 
-    $reflection = new \ReflectionClass(ApplicationDeploymentJob::class);
+    $reflection = new ReflectionClass(ApplicationDeploymentJob::class);
 
     // Set private properties
     $applicationProperty = $reflection->getProperty('application');
