@@ -93,7 +93,7 @@ class CoolifyUpgradeStatus
         }
 
         [$step, , $timestamp] = $parts;
-        if (! in_array($step, ['1', '2', '3', '4', '5'], true)) {
+        if (! in_array($step, ['1', '2', '3', '4', '5'], true) || trim($timestamp) === '') {
             return false;
         }
 
@@ -113,6 +113,10 @@ class CoolifyUpgradeStatus
     {
         if ($runningVersion === '' || $targetVersion === '') {
             return false;
+        }
+
+        if (! preg_match('/^\d+\.\d+/', $targetVersion)) {
+            return true;
         }
 
         return version_compare($runningVersion, $targetVersion, '>=');

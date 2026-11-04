@@ -261,6 +261,38 @@ describe('POST /api/v1/s3-storages', function () {
         ]);
     });
 
+    test('stores the given URL style, or detects it from the endpoint', function () {
+        $headers = ['Authorization' => 'Bearer '.$this->bearerToken, 'Content-Type' => 'application/json'];
+
+        $this->withHeaders($headers)->postJson('/api/v1/s3-storages', validS3StoragePayload(['name' => 'Default']))->assertStatus(201);
+        $this->withHeaders($headers)->postJson('/api/v1/s3-storages', validS3StoragePayload([
+            'name' => 'Alibaba',
+            'use_path_style_endpoint' => false,
+        ]))->assertStatus(201);
+
+        $this->withHeaders($headers)->postJson('/api/v1/s3-storages', validS3StoragePayload([
+            'name' => 'Detected',
+            'endpoint' => 'https://s3.oss-ap-southeast-1.aliyuncs.com',
+        ]))->assertStatus(201);
+
+        expect(S3Storage::where('name', 'Default')->sole()->use_path_style_endpoint)->toBeTrue()
+            ->and(S3Storage::where('name', 'Alibaba')->sole()->use_path_style_endpoint)->toBeFalse()
+            ->and(S3Storage::where('name', 'Detected')->sole()->use_path_style_endpoint)->toBeFalse();
+    });
+
+    test('stores the TLS verification setting, which checks the certificate by default', function () {
+        $headers = ['Authorization' => 'Bearer '.$this->bearerToken, 'Content-Type' => 'application/json'];
+
+        $this->withHeaders($headers)->postJson('/api/v1/s3-storages', validS3StoragePayload(['name' => 'Default']))->assertStatus(201);
+        $this->withHeaders($headers)->postJson('/api/v1/s3-storages', validS3StoragePayload([
+            'name' => 'Self-signed',
+            'skip_tls_verification' => true,
+        ]))->assertStatus(201);
+
+        expect(S3Storage::where('name', 'Default')->sole()->skip_tls_verification)->toBeFalse()
+            ->and(S3Storage::where('name', 'Self-signed')->sole()->skip_tls_verification)->toBeTrue();
+    });
+
     test('validates name is required', function () {
         $payload = validS3StoragePayload();
         unset($payload['name']);
@@ -375,6 +407,33 @@ describe('PATCH /api/v1/s3-storages/{uuid}', function () {
             'region' => 'eu-west-1',
             'bucket' => 'updated-bucket',
         ]);
+    });
+
+    test('updates the path-style setting', function () {
+        $storage = createS3StorageForTeam($this->team);
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$this->bearerToken,
+            'Content-Type' => 'application/json',
+        ])->patchJson("/api/v1/s3-storages/{$storage->uuid}", [
+            'use_path_style_endpoint' => false,
+        ])->assertStatus(200);
+
+        expect($storage->fresh()->use_path_style_endpoint)->toBeFalse();
+    });
+
+    test('updates the TLS verification setting', function () {
+        $storage = createS3StorageForTeam($this->team);
+        expect($storage->fresh()->skip_tls_verification)->toBeFalse();
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$this->bearerToken,
+            'Content-Type' => 'application/json',
+        ])->patchJson("/api/v1/s3-storages/{$storage->uuid}", [
+            'skip_tls_verification' => true,
+        ])->assertStatus(200);
+
+        expect($storage->fresh()->skip_tls_verification)->toBeTrue();
     });
 
     test('rejects empty body', function () {

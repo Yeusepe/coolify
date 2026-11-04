@@ -1,12 +1,16 @@
 <?php
 
+$release = json_decode(file_get_contents(dirname(__DIR__).'/release.json'), true);
+$upstream = json_decode(file_get_contents(dirname(__DIR__).'/upstream.json'), true);
+
 // 0 or an invalid value would remove the time limit of every remote command.
 $sshCommandTimeout = (int) env('SSH_COMMAND_TIMEOUT', 3600);
 
 return [
     'coolify' => [
-        'version' => env('COOLIFY_VERSION') ?: '4.4.6',
-        'helper_version' => '1.0.17',
+        'version' => env('COOLIFY_VERSION') ?: $release['stable']['coolify'],
+        'helper_version' => $upstream['helper']['version'],
+        'railpack_version' => '0.43.0',
         'self_hosted' => env('SELF_HOSTED', true),
         'autoupdate' => env('AUTOUPDATE'),
         'fork_managed_updates' => env('FORK_MANAGED_UPDATES', false),
@@ -19,7 +23,6 @@ return [
         'dev_seed_ip' => env('DEV_SEED_IP') ?: '127.0.0.1',
         'registry_url' => env('REGISTRY_URL', 'docker.io'),
         'helper_image' => env('HELPER_IMAGE', env('REGISTRY_URL', 'docker.io').'/coollabsio/coolify-helper'),
-        'is_windows_docker_desktop' => env('IS_WINDOWS_DOCKER_DESKTOP', false),
         'cdn_url' => env('CDN_URL', 'https://cdn.coollabs.io'),
         'versions_url' => env('VERSIONS_URL', env('CDN_URL', 'https://cdn.coollabs.io').'/coolify/versions.json'),
         'upgrade_script_url' => env('UPGRADE_SCRIPT_URL', env('CDN_URL', 'https://cdn.coollabs.io').'/coolify/upgrade.sh'),
@@ -30,7 +33,7 @@ return [
 
     'cloud' => [
         // Days after a subscription ends (or after a never-paid team was created) before cloud:cleanup-unsubscribed-teams deletes the team's data.
-        'data_retention_days' => (int) env('CLOUD_DATA_RETENTION_DAYS', 30),
+        'data_retention_days' => (int) env('CLOUD_DATA_RETENTION_DAYS', 60),
     ],
 
     'urls' => [
@@ -50,6 +53,12 @@ return [
         'host' => env('TERMINAL_HOST'),
         'port' => env('TERMINAL_PORT'),
         'command_timeout' => 0,
+        // Docker's default detach escape for `docker attach`. Pressing this
+        // sequence (Ctrl-P, Ctrl-Q) leaves the container's main process running.
+        'detach_keys' => 'ctrl-p,ctrl-q',
+        // Recent log lines shown when a console (attach) session opens, so the
+        // screen is not blank until the next line of live output arrives.
+        'console_history_lines' => 200,
     ],
 
     'pusher' => [
@@ -131,11 +140,6 @@ return [
     'webhooks' => [
         'feedback_discord_webhook' => env('FEEDBACK_DISCORD_WEBHOOK'),
         'dev_webhook' => env('SERVEO_URL'),
-    ],
-
-    'cloudflare' => [
-        'api_token' => env('CLOUDFLARE_API_TOKEN'),
-        'zone_id' => env('CLOUDFLARE_ZONE_ID'),
     ],
 
     'server_checks' => [

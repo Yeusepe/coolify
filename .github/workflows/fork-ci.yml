@@ -37,10 +37,10 @@ jobs:
           cache: npm
       - run: composer install --no-interaction --prefer-dist --no-progress
       - run: cp .env.testing .env
+      - run: npm ci
       - run: node --test tests/Scripts/passkeys.test.js
       - run: bash tests/Scripts/fork-update-test.sh
       - run: python3 tests/Scripts/source-scanner-test.py && python3 tests/Scripts/source-snapshot-test.py
-      - run: npm ci
       - run: npm run build
       - run: >-
           vendor/bin/pint --test app/Livewire/Server/Proxy.php
@@ -68,6 +68,7 @@ jobs:
         run: >-
           php artisan test --compact
           tests/Feature/PasskeysTest.php
+          tests/Feature/PasskeyUpgradeTest.php tests/Feature/Auth
           tests/Feature/FortifyProfileInformationRouteTest.php
           tests/Feature/OauthLoginTeamSelectionTest.php
           tests/Feature/AppIconsTest.php

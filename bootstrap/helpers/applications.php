@@ -1,8 +1,10 @@
 <?php
 
-use App\Actions\Application\StopApplication;
+use App\Actions\Shared\CloneVolumeDataWithSourceStopped;
 use App\Enums\ApplicationDeploymentStatus;
+use App\Enums\CancelPreviousDeployments;
 use App\Jobs\ApplicationDeploymentJob;
+use App\Jobs\CancelSupersededDeploymentJob;
 use App\Jobs\VolumeCloneJob;
 use App\Models\Application;
 use App\Models\ApplicationDeploymentQueue;
@@ -12,11 +14,13 @@ use App\Models\EnvironmentVariable;
 use App\Models\Server;
 use App\Models\StandaloneDocker;
 use App\Notifications\Application\DeploymentFailed;
+use App\Services\Dns\ResourceDnsRecords;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Spatie\Url\Url;
 
-function queue_application_deployment(Application $application, string $deployment_uuid, ?int $pull_request_id = 0, ?string $commit = null, bool $force_rebuild = false, bool $is_webhook = false, bool $is_api = false, bool $restart_only = false, ?string $git_type = null, bool $no_questions_asked = false, ?Server $server = null, ?StandaloneDocker $destination = null, bool $only_this_server = false, bool $rollback = false, ?string $docker_registry_image_tag = null, ?string $parent_deployment_uuid = null)
+function queue_application_deployment(Application $application, string $deployment_uuid, ?int $pull_request_id = 0, ?string $commit = null, bool $force_rebuild = false, bool $is_webhook = false, bool $is_api = false, bool $restart_only = false, ?string $git_type = null, bool $no_questions_asked = false, ?Server $server = null, ?StandaloneDocker $destination = null, bool $only_this_server = false, bool $rollback = false, ?string $docker_registry_image_tag = null, ?string $parent_deployment_uuid = null, bool $is_mcp = false, ?CancelPreviousDeployments $cancel_previous = null)
 {
     $commit = $commit ?: ($application->git_commit_sha ?: 'HEAD');
     $commit = validateGitRef($commit, 'deployment commit');
@@ -35,7 +39,11 @@ function queue_application_deployment(Application $application, string $deployme
         $destination_id = $destination->id;
     }
 
-    $admission = DB::transaction(function () use ($application, $application_id, $commit, $deployment_uuid, $deployment_url, $destination_id, $docker_registry_image_tag, $force_rebuild, $git_type, $is_api, $is_webhook, $no_questions_asked, $only_this_server, $parent_deployment_uuid, $pull_request_id, $restart_only, $rollback, $server_id, $server_name) {
+    // MCP tools also call the REST API controllers through an internal request.
+    $is_mcp = $is_mcp || request()->attributes->get('mcp_rest_bridge') === true;
+    $is_api = $is_api && ! $is_mcp;
+
+    $admission = DB::transaction(function () use ($application, $application_id, $cancel_previous, $commit, $deployment_uuid, $deployment_url, $destination_id, $docker_registry_image_tag, $force_rebuild, $git_type, $is_api, $is_mcp, $is_webhook, $no_questions_asked, $only_this_server, $parent_deployment_uuid, $pull_request_id, $restart_only, $rollback, $server_id, $server_name) {
         // Lock stable rows because an empty deployment queue has no row to lock.
         Application::query()->whereKey($application_id)->lockForUpdate()->firstOrFail();
         $serverForQueueCheck = Server::query()->whereKey($server_id)->lockForUpdate()->firstOrFail();
@@ -80,6 +88,7 @@ function queue_application_deployment(Application $application, string $deployme
             'force_rebuild' => $force_rebuild,
             'is_webhook' => $is_webhook,
             'is_api' => $is_api,
+            'is_mcp' => $is_mcp,
             'restart_only' => $restart_only,
             'commit' => $commit,
             'rollback' => $rollback,
@@ -88,16 +97,19 @@ function queue_application_deployment(Application $application, string $deployme
             'parent_deployment_uuid' => $parent_deployment_uuid,
         ]);
 
+        $superseded = cancel_superseded_deployments($deployment, $application, $cancel_previous);
+
         // Decide whether to start while the application and server rows are still locked,
         // so concurrent requests cannot both see an idle queue and start two deployments.
-        $started = $no_questions_asked || next_queuable($server_id, $application_id, $commit, $pull_request_id);
+        // After a cancelled build, CancelSupersededDeploymentJob starts it once the build is stopped.
+        $started = $superseded['building']->isEmpty() && ($no_questions_asked || next_queuable($deployment));
         if ($started) {
             $deployment->update([
                 'status' => ApplicationDeploymentStatus::IN_PROGRESS->value,
             ]);
         }
 
-        return ['deployment' => $deployment, 'started' => $started];
+        return ['deployment' => $deployment, 'started' => $started, 'superseded' => $superseded];
     });
 
     if (! isset($admission['deployment'])) {
@@ -106,7 +118,22 @@ function queue_application_deployment(Application $application, string $deployme
 
     $deployment = $admission['deployment'];
 
-    if (auth()->check() && ! $is_webhook && ! $is_api && ! $rollback) {
+    foreach ($admission['superseded'] as $kind => $cancelled) {
+        foreach ($cancelled as $old) {
+            $old->addLogEntry("Deployment cancelled: the newer deployment {$deployment_uuid} (commit {$commit}) replaces it.", 'stderr');
+            if ($kind !== 'building') {
+                continue;
+            }
+            try {
+                CancelSupersededDeploymentJob::dispatch($old, (int) $application->team()->id);
+            } catch (Throwable $e) {
+                Log::warning("Failed to dispatch the cleanup of superseded deployment {$old->deployment_uuid}: {$e->getMessage()}");
+                queue_next_deployment($application, $old->server_id);
+            }
+        }
+    }
+
+    if (auth()->check() && ! $is_webhook && ! $is_api && ! $is_mcp && ! $rollback) {
         auditLog($restart_only ? 'ui.application.restarted' : 'ui.application.deployed', [
             'application_uuid' => $application->uuid,
             'application_name' => $application->name,
@@ -132,6 +159,71 @@ function queue_application_deployment(Application $application, string $deployme
         'message' => 'Deployment queued.',
         'deployment_uuid' => $deployment_uuid,
     ];
+}
+/**
+ * A new deployment can replace older deployments of the same application, pull request, and server:
+ * - A webhook deployment replaces older webhook deployments, as the application settings allow.
+ * - An API or MCP deployment replaces older webhook, API, and MCP deployments, as its caller asks
+ *   with $cancelPrevious. Without it, nothing is cancelled, so callers that wait for their
+ *   deployment keep working.
+ *
+ * A running deployment is cancelled only before it starts to deploy containers, so a cancel never
+ * leaves an application half deployed. Manual, restart, and rollback deployments are never cancelled,
+ * and restarts and rollbacks never cancel others.
+ *
+ * Call it in the admission transaction, after the new deployment is created.
+ *
+ * @return array{queued: Collection<int, ApplicationDeploymentQueue>, building: Collection<int, ApplicationDeploymentQueue>}
+ */
+function cancel_superseded_deployments(ApplicationDeploymentQueue $deployment, Application $application, ?CancelPreviousDeployments $cancelPrevious = null): array
+{
+    $none = ['queued' => collect(), 'building' => collect()];
+    if ($deployment->rollback || $deployment->restart_only) {
+        return $none;
+    }
+    $settings = $application->settings;
+    $fromWebhook = (bool) $deployment->is_webhook;
+    $mode = match (true) {
+        $fromWebhook && (bool) $settings?->is_auto_cancel_building_deployments_enabled => CancelPreviousDeployments::BUILDING,
+        $fromWebhook && (bool) $settings?->is_auto_cancel_queued_deployments_enabled => CancelPreviousDeployments::QUEUED,
+        (bool) $deployment->is_api || (bool) $deployment->is_mcp => $cancelPrevious ?? CancelPreviousDeployments::NONE,
+        default => CancelPreviousDeployments::NONE,
+    };
+    if ($mode === CancelPreviousDeployments::NONE) {
+        return $none;
+    }
+    $cancelBuilding = $mode === CancelPreviousDeployments::BUILDING;
+
+    $candidates = ApplicationDeploymentQueue::query()
+        ->where('application_id', $deployment->application_id)
+        ->where('pull_request_id', $deployment->pull_request_id)
+        ->where('server_id', $deployment->server_id)
+        ->where(fn ($query) => $fromWebhook
+            ? $query->where('is_webhook', true)
+            : $query->where('is_webhook', true)->orWhere('is_api', true)->orWhere('is_mcp', true))
+        ->where('rollback', false)
+        ->where('restart_only', false)
+        ->whereKeyNot($deployment->getKey())
+        ->where(function ($query) use ($cancelBuilding) {
+            $query->where('status', ApplicationDeploymentStatus::QUEUED->value);
+            if ($cancelBuilding) {
+                $query->orWhere(fn ($query) => $query
+                    ->where('status', ApplicationDeploymentStatus::IN_PROGRESS->value)
+                    ->whereNull('deploy_started_at'));
+            }
+        })
+        ->get();
+
+    // A conditional update, so a build that starts to deploy at the same moment is never cancelled.
+    $cancelled = $candidates->filter(fn (ApplicationDeploymentQueue $old) => ApplicationDeploymentQueue::query()
+        ->whereKey($old->getKey())
+        ->where('status', $old->status)
+        ->whereNull('deploy_started_at')
+        ->update(['status' => ApplicationDeploymentStatus::CANCELLED_BY_USER->value]) === 1);
+    [$building, $queued] = $cancelled->partition(fn (ApplicationDeploymentQueue $old) => $old->status === ApplicationDeploymentStatus::IN_PROGRESS->value);
+    $cancelled->each(fn (ApplicationDeploymentQueue $old) => $old->status = ApplicationDeploymentStatus::CANCELLED_BY_USER->value);
+
+    return ['queued' => $queued->values(), 'building' => $building->values()];
 }
 /**
  * Start a queued deployment right away, ignoring the per-application and per-server
@@ -178,8 +270,14 @@ function start_next_queued_deployments(Application $application, ?int $finished_
         ->where('status', ApplicationDeploymentStatus::QUEUED)
         ->distinct()
         ->pluck('server_id');
+    // A build on a build server frees a slot that deployments on other servers of the team can wait for.
+    $primary_server = $application->destination?->server;
+    $build_server_team_server_ids = $primary_server && $application->buildServerCandidates($primary_server)->isNotEmpty()
+        ? Server::where('team_id', $primary_server->team_id)->pluck('id')
+        : collect();
     $server_ids = collect([$application->destination?->server_id, $finished_deployment_server_id])
         ->merge($application_queued_server_ids)
+        ->merge($build_server_team_server_ids)
         ->filter(fn ($server_id) => $server_id !== null)
         ->unique()
         ->values();
@@ -214,7 +312,7 @@ function start_queued_deployment(ApplicationDeploymentQueue $deployment, bool $f
             return false;
         }
 
-        if (! $force && ! next_queuable($current->server_id, $current->application_id, $current->commit, $current->pull_request_id)) {
+        if (! $force && ! next_queuable($current)) {
             return false;
         }
 
@@ -289,12 +387,18 @@ function fail_undispatchable_deployment(ApplicationDeploymentQueue $deployment, 
     }
 }
 
-function next_queuable(string $server_id, string $application_id, string $commit = 'HEAD', int $pull_request_id = 0): bool
+/**
+ * Decide whether a queued deployment can start now. Each deployment holds one build slot of the
+ * server that builds it: its deployment server, or a build server of the team. When it builds on a
+ * build server, it reserves the least busy one with a free slot in build_server_id, which the caller
+ * saves with the status change. Call it while the application and deployment server rows are locked.
+ */
+function next_queuable(ApplicationDeploymentQueue $deployment): bool
 {
     // Check if there's already a deployment in progress for this application with the same pull_request_id
     // This allows normal deployments and PR deployments to run concurrently
-    $in_progress = ApplicationDeploymentQueue::where('application_id', $application_id)
-        ->where('pull_request_id', $pull_request_id)
+    $in_progress = ApplicationDeploymentQueue::where('application_id', $deployment->application_id)
+        ->where('pull_request_id', $deployment->pull_request_id)
         ->where('status', ApplicationDeploymentStatus::IN_PROGRESS->value)
         ->exists();
 
@@ -302,22 +406,56 @@ function next_queuable(string $server_id, string $application_id, string $commit
         return false;
     }
 
-    // Check server's concurrent build limit
     // A deleted server keeps its queued deployments; they cannot run anymore.
-    $server = Server::find($server_id);
-    if (! $server) {
+    $server = Server::find($deployment->server_id);
+    $application = Application::find($deployment->application_id);
+    if (! $server || ! $application) {
         return false;
     }
-    $concurrent_builds = $server->settings->concurrent_builds;
-    $active_deployments = ApplicationDeploymentQueue::where('server_id', $server_id)
-        ->where('status', ApplicationDeploymentStatus::IN_PROGRESS->value)
-        ->count();
 
-    if ($active_deployments >= $concurrent_builds) {
+    $buildServers = $application->buildServerCandidates($server);
+    if ($buildServers->isEmpty()) {
+        return active_builds_on_server($server->id) < $server->settings->concurrent_builds;
+    }
+
+    // Deployments of other servers can take the same build slots, so lock the build servers too.
+    Server::query()->whereKey($buildServers->modelKeys())->orderBy('id')->lockForUpdate()->get();
+    $buildServer = least_busy_build_server($buildServers);
+    if (! $buildServer) {
         return false;
     }
+    $deployment->build_server_id = $buildServer->id;
 
     return true;
+}
+
+/**
+ * The running deployments that build on a server: its own deployments without a build server,
+ * and the deployments that it builds as a build server.
+ */
+function active_builds_on_server(int $server_id): int
+{
+    return ApplicationDeploymentQueue::where('status', ApplicationDeploymentStatus::IN_PROGRESS->value)
+        ->where(fn ($query) => $query->where('build_server_id', $server_id)
+            ->orWhere(fn ($query) => $query->where('server_id', $server_id)->whereNull('build_server_id')))
+        ->count();
+}
+
+/**
+ * The build server with the fewest running builds, at random among equals. With $onlyWithFreeSlot,
+ * a server that already runs as many builds as its "Concurrent builds" setting allows is skipped,
+ * and null means that all servers are full.
+ *
+ * @param  Collection<int, Server>  $buildServers
+ */
+function least_busy_build_server(Collection $buildServers, bool $onlyWithFreeSlot = true): ?Server
+{
+    return $buildServers
+        ->map(fn (Server $buildServer) => ['server' => $buildServer, 'builds' => active_builds_on_server($buildServer->id)])
+        ->filter(fn (array $candidate) => ! $onlyWithFreeSlot || $candidate['builds'] < $candidate['server']->settings->concurrent_builds)
+        ->shuffle()
+        ->sortBy('builds')
+        ->first()['server'] ?? null;
 }
 /**
  * Start the queued deployments that can run after a cancellation. With the application of the
@@ -422,31 +560,10 @@ function clone_application(Application $source, $destination, array $overrides =
         $newTask->save();
     }
 
-    // Clone previews with FQDN regeneration
-    $applicationPreviews = $source->previews()->get();
-    foreach ($applicationPreviews as $preview) {
-        $newPreview = $preview->replicate([
-            'id',
-            'created_at',
-            'updated_at',
-        ])->fill([
-            'uuid' => new_public_id(),
-            'application_id' => $newApplication->id,
-            'status' => 'exited',
-            'fqdn' => null,
-            'docker_compose_domains' => null,
-        ]);
-        $newPreview->save();
-
-        // Regenerate FQDN for the cloned preview
-        if ($newApplication->build_pack === 'dockercompose') {
-            $newPreview->generate_preview_fqdn_compose();
-        } else {
-            $newPreview->generate_preview_fqdn();
-        }
-    }
+    // Preview records belong to the pull request deployments of the source. The clone gets its own on the next pull request.
 
     // Clone persistent volumes
+    $pendingVolumeClones = [];
     $persistentVolumes = $source->persistentStorages()->get();
     foreach ($persistentVolumes as $volume) {
         $newName = '';
@@ -472,27 +589,17 @@ function clone_application(Application $source, $destination, array $overrides =
         $newPersistentVolume->save();
 
         if ($cloneVolumeData) {
-            try {
-                StopApplication::dispatch($source, false, false);
-                $sourceVolume = $volume->name;
-                $targetVolume = $newPersistentVolume->name;
-                $sourceServer = $source->destination->server;
-                $targetServer = $newApplication->destination->server;
-
-                VolumeCloneJob::dispatch($sourceVolume, $targetVolume, $sourceServer, $targetServer, $newPersistentVolume);
-
-                queue_application_deployment(
-                    deployment_uuid: new_public_id(),
-                    application: $source,
-                    server: $sourceServer,
-                    destination: $source->destination,
-                    no_questions_asked: true
-                );
-            } catch (Exception $e) {
-                Log::error('Failed to copy volume data for '.$volume->name.': '.$e->getMessage());
-            }
+            $pendingVolumeClones[] = new VolumeCloneJob(
+                $volume->name,
+                $newPersistentVolume->name,
+                $source->destination->server,
+                $newApplication->destination->server,
+                $newPersistentVolume,
+            );
         }
     }
+
+    CloneVolumeDataWithSourceStopped::run($source, $pendingVolumeClones);
 
     // Clone file storages
     $fileStorages = $source->fileStorages()->get();
@@ -551,5 +658,23 @@ function clone_application(Application $source, $destination, array $overrides =
         });
     }
 
+    $dnsRecords = app(ResourceDnsRecords::class);
+    $dnsRecords->queueAutomaticRecords($newApplication, array_keys($dnsRecords->hostnameUsers($source)));
+
     return $newApplication;
+}
+
+/**
+ * The SSH command that git uses to reach a repository.
+ * The keepalive options stop a stalled connection after about one minute; without them git waits until the deployment timeout.
+ */
+function gitSshCommand(int|string $port, ?string $identityFile = null, bool $identitiesOnly = true): string
+{
+    $command = "ssh -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -p {$port} -o Port={$port} -o LogLevel=ERROR -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null";
+
+    if ($identityFile !== null) {
+        $command .= " -i {$identityFile}".($identitiesOnly ? ' -o IdentitiesOnly=yes' : '');
+    }
+
+    return $command;
 }

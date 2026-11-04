@@ -9,8 +9,10 @@ use App\Support\ResourceStartActivity;
 use App\Traits\Auditable;
 use App\Traits\ClearsGlobalSearchCache;
 use App\Traits\HasComposeVolumeWarnings;
+use App\Traits\HasMaintenancePage;
 use App\Traits\HasSafeStringAttribute;
 use App\Traits\HasSecretManager;
+use App\Traits\ScopedByAccessGrants;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -34,6 +36,7 @@ use OpenApi\Attributes as OA;
         'destination_id' => ['type' => 'integer', 'description' => 'The unique identifier of the destination where the service is running.'],
         'connect_to_docker_network' => ['type' => 'boolean', 'description' => 'The flag to connect the service to the predefined Docker network.'],
         'is_container_label_escape_enabled' => ['type' => 'boolean', 'description' => 'The flag to enable the container label escape.'],
+        'redact_all_env_values_in_logs' => ['type' => 'boolean', 'description' => 'Hide every environment variable value in logs. When false, only locked values are hidden.'],
         'is_container_label_readonly_enabled' => ['type' => 'boolean', 'description' => 'The flag to enable the container label readonly.'],
         'config_hash' => ['type' => 'string', 'description' => 'The hash of the service configuration.'],
         'service_type' => ['type' => 'string', 'description' => 'The type of the service.'],
@@ -44,7 +47,7 @@ use OpenApi\Attributes as OA;
 )]
 class Service extends BaseModel
 {
-    use Auditable, ClearsGlobalSearchCache, HasComposeVolumeWarnings, HasFactory, HasSafeStringAttribute, HasSecretManager, SoftDeletes;
+    use Auditable, ClearsGlobalSearchCache, HasComposeVolumeWarnings, HasFactory, HasMaintenancePage, HasSafeStringAttribute, HasSecretManager, ScopedByAccessGrants, SoftDeletes;
 
     private static $parserVersion = '5';
 
@@ -59,6 +62,7 @@ class Service extends BaseModel
         'config_hash',
         'compose_parsing_version',
         'is_container_label_escape_enabled',
+        'redact_all_env_values_in_logs',
         'environment_id',
         'server_id',
         'destination_id',
@@ -69,6 +73,7 @@ class Service extends BaseModel
 
     protected $casts = [
         'include_coolify_default_variables' => 'boolean',
+        'redact_all_env_values_in_logs' => 'boolean',
     ];
 
     /**
@@ -82,6 +87,13 @@ class Service extends BaseModel
         'docker_compose_raw',
     ];
 
+    protected function casts(): array
+    {
+        return [
+            'is_maintenance_enabled' => 'boolean',
+        ];
+    }
+
     protected static function booted()
     {
         static::creating(function ($service) {
@@ -92,6 +104,11 @@ class Service extends BaseModel
         static::created(function ($service) {
             $service->compose_parsing_version = self::$parserVersion;
             $service->save();
+        });
+        static::saving(function ($service) {
+            if ($service->isDirty('docker_compose_raw')) {
+                EnvironmentVariable::authorizeAddedSharedVariableReferencesIn($service, $service->getOriginal('docker_compose_raw'), $service->docker_compose_raw, 'docker_compose_raw');
+            }
         });
     }
 
@@ -245,6 +262,15 @@ class Service extends BaseModel
             return 'starting:unhealthy';
         }
 
+        return $this->containerStatus();
+    }
+
+    /**
+     * The aggregate status of the stored container statuses, without the running start check.
+     * Callers that check starting services in bulk use it to avoid a query per service.
+     */
+    public function containerStatus(): ?string
+    {
         $applications = $this->applications;
         $databases = $this->databases;
 
@@ -304,6 +330,11 @@ class Service extends BaseModel
         $resources = $applications->concat($databases);
 
         foreach ($resources as $resource) {
+            // A part that is not in the compose file has no container, so it does not count.
+            if ($resource->is_removed_from_compose ?? false) {
+                continue;
+            }
+
             $isExcluded = $resource->exclude_from_status || str($resource->status)->contains(':excluded');
 
             // Filter based on excludedOnly flag
@@ -1406,7 +1437,10 @@ class Service extends BaseModel
                     if (filled($field['value']) && str($field['value'])->startsWith('$SERVICE_')) {
                         $searchValue = str($field['value'])->after('$')->value;
                         $newValue = $this->environment_variables()->where('key', $searchValue)->first();
-                        if ($newValue) {
+                        if ($newValue?->is_shown_once) {
+                            $field['value'] = null;
+                            $field['isLocked'] = true;
+                        } elseif ($newValue) {
                             $field['value'] = $newValue->value;
                         }
                     }
@@ -1519,6 +1553,29 @@ class Service extends BaseModel
         return $this->hasMany(ServiceApplication::class);
     }
 
+    /**
+     * Domains of every application in the service stack.
+     *
+     * @return Collection<int, array{url: string, force_https: bool}>
+     */
+    public function maintenanceDomains(): Collection
+    {
+        return $this->applications()->get()
+            ->flatMap(fn (ServiceApplication $application) => collect($application->fqdns)
+                ->map(fn ($url) => trim((string) $url))
+                ->filter()
+                ->map(fn (string $url) => ['url' => $url, 'force_https' => $application->isForceHttpsEnabled()]))
+            ->values();
+    }
+
+    /**
+     * @return Collection<int, Server>
+     */
+    public function maintenanceServers(): Collection
+    {
+        return collect([$this->server])->filter()->values();
+    }
+
     public function databases()
     {
         return $this->hasMany(ServiceDatabase::class);
@@ -1570,6 +1627,14 @@ class Service extends BaseModel
     public function scheduled_tasks(): HasMany
     {
         return $this->hasMany(ScheduledTask::class)->orderBy('name', 'asc');
+    }
+
+    /**
+     * Whether logs hide every environment value, or only locked values.
+     */
+    public function redactsAllEnvValuesInLogs(): bool
+    {
+        return $this->redact_all_env_values_in_logs ?? true;
     }
 
     public function environment_variables()

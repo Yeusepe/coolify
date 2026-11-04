@@ -55,8 +55,8 @@ it('notification settings have traefik_outdated fields', function () {
     expect($team->webhookNotificationSettings)->toHaveKey('traefik_outdated_webhook_notifications');
 });
 
-it('versions.json contains traefik branches with patch versions', function () {
-    $versionsPath = base_path('versions.json');
+it('upstream.json contains traefik branches with patch versions', function () {
+    $versionsPath = base_path('upstream.json');
     expect(File::exists($versionsPath))->toBeTrue();
 
     $versions = json_decode(File::get($versionsPath), true);
@@ -167,7 +167,7 @@ it('sends immediate notifications when outdated traefik is detected', function (
     expect($notification->servers->first()->outdatedInfo['type'])->toBe('patch_update');
 });
 
-it('does not notify about Traefik patch updates', function () {
+it('notifies about a Traefik patch update', function () {
     $team = Team::factory()->create();
     $team->webhookNotificationSettings()->update([
         'webhook_enabled' => true,
@@ -178,7 +178,49 @@ it('does not notify about Traefik patch updates', function () {
     $job = new CheckTraefikVersionForServerJob($server, ['v3.7' => '3.7.13']);
     (new ReflectionMethod($job, 'storeOutdatedInfo'))->invoke($job, '3.7.7', '3.7.13', 'patch_update');
 
+    Notification::assertSentTo($team, TraefikVersionOutdated::class);
+});
+
+it('does not repeat a Traefik patch update notification for the same latest version', function () {
+    $team = Team::factory()->create();
+    $team->webhookNotificationSettings()->update([
+        'webhook_enabled' => true,
+        'webhook_url' => 'https://example.com/webhook',
+    ]);
+    $server = Server::factory()->create([
+        'team_id' => $team->id,
+        'traefik_outdated_info' => [
+            'current' => '3.7.7',
+            'latest' => '3.7.13',
+            'type' => 'patch_update',
+        ],
+    ]);
+
+    $job = new CheckTraefikVersionForServerJob($server, ['v3.7' => '3.7.13']);
+    (new ReflectionMethod($job, 'storeOutdatedInfo'))->invoke($job, '3.7.7', '3.7.13', 'patch_update');
+
     Notification::assertNothingSent();
+});
+
+it('notifies again when a newer Traefik patch version is released', function () {
+    $team = Team::factory()->create();
+    $team->webhookNotificationSettings()->update([
+        'webhook_enabled' => true,
+        'webhook_url' => 'https://example.com/webhook',
+    ]);
+    $server = Server::factory()->create([
+        'team_id' => $team->id,
+        'traefik_outdated_info' => [
+            'current' => '3.7.7',
+            'latest' => '3.7.13',
+            'type' => 'patch_update',
+        ],
+    ]);
+
+    $job = new CheckTraefikVersionForServerJob($server, ['v3.7' => '3.7.16']);
+    (new ReflectionMethod($job, 'storeOutdatedInfo'))->invoke($job, '3.7.7', '3.7.16', 'patch_update');
+
+    Notification::assertSentTo($team, TraefikVersionOutdated::class);
 });
 
 it('notifies about Traefik minor updates', function () {

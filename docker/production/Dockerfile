@@ -4,18 +4,26 @@
 ARG PHP_BASE_IMAGE=ghcr.io/yeusepe/coolify:php-security-20261024@sha256:664b848340ad939fcceb54537db6653a4e2a4772b5eff0d516ee490b83fb7830
 ARG TERMINAL_NODE_IMAGE=node:24.22.1-alpine3.23@sha256:0468540aa58203ff9e40c2aab3907c52644ab818af6176b1c70a026137dc92a2
 # https://github.com/cloudflare/cloudflared/releases
-ARG CLOUDFLARED_VERSION=2026.10.2
+ARG CLOUDFLARED_VERSION=2026.10.3
 # https://www.postgresql.org/support/versioning/
 # Note: We are using version 18 of the postgres client (while still using postgres 15 for the postgres server) as version 15 has been removed from Alpine 3.23+ https://pkgs.alpinelinux.org/packages?name=postgresql*-client&branch=v3.23&repo=&arch=x86_64&origin=&flagged=&maintainer=
 ARG POSTGRES_VERSION=18
 # https://nginx.org/en/linux_packages.html
 ARG NGINX_VERSION=1.31.8-r1
 # uv 0.3.0 source, pinned to avoid intermittent PECL download failures.
+ARG NODE_VERSION=24.22.1
+ARG PHP_UV_VERSION=0.3.0
 ARG PHP_UV_SOURCE=amphp/ext-uv@1d18f5d1d12e77c24b6b0b9d69194b1051efae66
 
 # Add user/group
 ARG USER_ID=9999
 ARG GROUP_ID=9999
+
+# Set by the build workflow
+ARG COOLIFY_VERSION
+ARG SOURCE_DATE_EPOCH
+ARG CREATED
+ARG GIT_SHA
 
 # =================================================================
 # Stage 1: Composer dependencies
@@ -52,6 +60,8 @@ RUN --mount=type=cache,target=/tmp/cache \
     COMPOSER_CACHE_DIR=/tmp/cache composer install --no-dev --no-interaction --no-plugins --no-scripts --prefer-dist
 
 USER www-data
+
+FROM ${TERMINAL_NODE_IMAGE} AS nodejs
 
 # =================================================================
 # Stage 2: Frontend assets compilation
@@ -177,6 +187,11 @@ RUN mkdir -p /usr/local/bin && \
 COPY docker/production/etc/php/conf.d/zzz-custom-php.ini /usr/local/etc/php/conf.d/zzz-custom-php.ini
 RUN php -r 'if (ini_get("session.upload_progress.enabled") !== "0") exit(1);'
 ENV PHP_OPCACHE_ENABLE=1
+# v5 defaults this to 0. Keep 1: app:init rebuilds the Laravel caches while php-fpm already runs.
+ENV PHP_OPCACHE_VALIDATE_TIMESTAMPS=1
+# v5 defaults to 256 MB with 32 MB interned strings. Every PHP CLI process has its own cache, so keep it small.
+ENV PHP_OPCACHE_MEMORY_CONSUMPTION=128
+ENV PHP_OPCACHE_INTERNED_STRINGS_BUFFER=16
 
 # Configure entrypoint
 COPY --chmod=755 docker/production/entrypoint.d/ /etc/entrypoint.d
@@ -203,12 +218,12 @@ RUN test -s resources/scripts/source-scan.py
 COPY --chown=www-data:www-data artisan artisan
 COPY --chown=www-data:www-data openapi.yaml ./openapi.yaml
 COPY --chown=www-data:www-data changelogs/ ./changelogs/
-# Version data for Traefik, Sentinel, and helper checks until CheckForUpdatesJob refreshes it
-COPY --chown=www-data:www-data versions.json ./versions.json
+COPY --chown=www-data:www-data release.json upstream.json ./
 
 RUN composer dump-autoload
 
 # Install terminal WebSocket server dependencies
+COPY --from=nodejs /usr/local/bin/node /usr/local/bin/node
 COPY --from=terminal-dependencies --chown=www-data:www-data /terminal /terminal
 
 # Configure Nginx and S6 overlay
@@ -223,6 +238,30 @@ RUN mkdir -p /etc/nginx/conf.d && \
 # Install MinIO client
 COPY --from=minio-client /usr/bin/mc /usr/bin/mc
 RUN chmod +x /usr/bin/mc
+
+ARG PHP_BASE_IMAGE
+ARG NODE_VERSION
+ARG PHP_UV_VERSION
+ARG CREATED
+ARG GIT_SHA
+
+LABEL org.opencontainers.image.title="Coolify" \
+    org.opencontainers.image.description="An open-source, self-hostable PaaS alternative to Vercel, Heroku & Netlify that lets you easily deploy static sites, databases, full-stack applications and 360+ one-click services on your own servers." \
+    org.opencontainers.image.version="${COOLIFY_VERSION}" \
+    org.opencontainers.image.created="${CREATED}" \
+    org.opencontainers.image.revision="${GIT_SHA}" \
+    org.opencontainers.image.licenses="Apache-2.0" \
+    org.opencontainers.image.authors="coollabsio" \
+    org.opencontainers.image.vendor="coollabsio" \
+    org.opencontainers.image.url="https://coolify.io" \
+    org.opencontainers.image.source="https://github.com/coollabsio/coolify" \
+    org.opencontainers.image.documentation="https://coolify.io/docs" \
+    org.opencontainers.image.base.name="${PHP_BASE_IMAGE}" \
+    io.coolify.nginx.version="${NGINX_VERSION}" \
+    io.coolify.node.version="${NODE_VERSION}" \
+    io.coolify.cloudflared.version="${CLOUDFLARED_VERSION}" \
+    io.coolify.postgresql-client.version="${POSTGRES_VERSION}" \
+    io.coolify.php-uv.version="${PHP_UV_VERSION}"
 
 # Switch to non-root user
 USER www-data

@@ -16,6 +16,11 @@ if (! function_exists('auditLog')) {
      */
     function auditLog(string $event, array $context = [], string $level = 'info'): void
     {
+        // MCP tools also call the REST API controllers through an internal request.
+        if (str_starts_with($event, 'api.') && app()->bound('request') && request()->attributes->get('mcp_rest_bridge') === true) {
+            $event = 'mcp.'.substr($event, 4);
+        }
+
         if (! shouldRecordAuditEvent($event, $context)) {
             return;
         }
@@ -28,7 +33,7 @@ if (! function_exists('auditLog')) {
             $token = $user?->currentAccessToken();
             $payload = AuditEvent::redactContext(array_merge([
                 'event' => $event,
-                'ip' => $request?->ip(),
+                'ip' => $request ? (client_ip($request) ?: null) : null,
                 'ua' => substr((string) $request?->userAgent(), 0, 200),
                 'user_id' => $user?->id,
                 'user_email' => $user?->email,
@@ -102,7 +107,7 @@ if (! function_exists('shouldRecordAuditEvent')) {
             $request = app()->bound('request') ? request() : null;
             $fingerprint = hash('sha256', json_encode([
                 $event,
-                $request?->ip(),
+                $request ? client_ip($request) : null,
                 data_get($context, 'reason'),
                 data_get($context, 'server_uuid'),
                 Str::lower(trim((string) data_get($context, 'attempted_email'))),
