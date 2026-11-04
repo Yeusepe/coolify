@@ -18,7 +18,7 @@ beforeEach(function () {
     Storage::fake('ssh-mux');
     config()->set('constants.ssh.max_retries', 1);
     config()->set('constants.ssh.mux_enabled', false);
-    InstanceSettings::forceCreate(['id' => 0]);
+    InstanceSettings::forceCreate(['id' => 0, 'is_api_enabled' => true]);
 });
 
 function hostSecurityServer(): Server
@@ -166,3 +166,15 @@ it('keeps DNF security advisories without CVEs and handles either query failing 
         ->and($result)->not->toHaveKey('error');
     Process::assertRan(fn ($process) => str_contains(remoteProcessScript($process), 'dnf updateinfo list --security --available'));
 })->with([[null, false, 2], ['CVE check unavailable', false, 2], [null, true, null]]);
+
+it('keeps private host reports out of generic server API settings', function (bool $list) {
+    $server = hostSecurityServer();
+    $server->settings->update(['patch_check_result' => ['host_security' => ['report' => 'private-host-advisory-report']]]);
+    session(['currentTeam' => $server->team]);
+    $token = $server->team->members()->firstOrFail()->createToken('host-report-test', ['read']);
+
+    $response = $this->withToken($token->plainTextToken)->getJson($list ? '/api/v1/servers' : '/api/v1/servers/'.$server->uuid);
+
+    $response->assertOk();
+    expect($response->getContent())->not->toContain('private-host-advisory-report');
+})->with([false, true]);

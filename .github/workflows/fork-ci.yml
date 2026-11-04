@@ -63,6 +63,7 @@ jobs:
           app/Actions/Server/CheckHostSecurity.php app/Actions/Server/CheckUpdates.php
           app/Jobs/ServerPatchCheckJob.php app/Notifications/Server/ServerPatchCheck.php
           app/Livewire/Server/Security/Patches.php
+          app/Models/ServerSetting.php
           tests/Feature/Server/HostSecurityCheckTest.php tests/Feature/Server/ServerPatchesTest.php
           tests/Feature/Server/ServerListPatchStatusTest.php tests/Unit/Actions/Server/ServerPatchCommandsTest.php
       - name: Full upstream regression suite

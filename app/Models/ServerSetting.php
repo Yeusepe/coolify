@@ -224,6 +224,7 @@ class ServerSetting extends Model
      */
     protected $hidden = [
         'is_build_server',
+        'patch_check_result',
         'sentinel_token',
         'sentinel_custom_url',
         'logdrain_newrelic_license_key',
