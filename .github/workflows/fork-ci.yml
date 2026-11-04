@@ -64,6 +64,7 @@ jobs:
           app/Jobs/ServerPatchCheckJob.php app/Notifications/Server/ServerPatchCheck.php
           app/Livewire/Server/Security/Patches.php
           app/Models/ServerSetting.php
+          tests/Feature/TeamTwoFactorRequirementTest.php
           tests/Feature/Server/HostSecurityCheckTest.php tests/Feature/Server/ServerPatchesTest.php
           tests/Feature/Server/ServerListPatchStatusTest.php tests/Unit/Actions/Server/ServerPatchCommandsTest.php
       - name: Full upstream regression suite
@@ -113,6 +114,7 @@ jobs:
           tests/Feature/Server/HostSecurityCheckTest.php tests/Feature/Server/ServerPatchesTest.php
           tests/Feature/Server/ServerListPatchStatusTest.php tests/Feature/Server/ServerPatchCheckNotificationTest.php
           tests/Unit/Actions/Server/ServerPatchCommandsTest.php
+          tests/Feature/TeamTwoFactorRequirementTest.php
       - run: php artisan test --compact tests/Feature/ReverbAndTerminalPackagingTest.php --filter="runs Reverb and terminal"
       - run: php artisan view:cache
       - run: php artisan view:clear
