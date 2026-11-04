@@ -61,8 +61,6 @@ RUN --mount=type=cache,target=/tmp/cache \
 
 USER www-data
 
-FROM ${TERMINAL_NODE_IMAGE} AS nodejs
-
 # =================================================================
 # Stage 2: Frontend assets compilation
 # =================================================================
@@ -223,7 +221,6 @@ COPY --chown=www-data:www-data release.json upstream.json ./
 RUN composer dump-autoload
 
 # Install terminal WebSocket server dependencies
-COPY --from=nodejs /usr/local/bin/node /usr/local/bin/node
 COPY --from=terminal-dependencies --chown=www-data:www-data /terminal /terminal
 
 # Configure Nginx and S6 overlay

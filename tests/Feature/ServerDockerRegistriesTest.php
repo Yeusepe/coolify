@@ -76,7 +76,7 @@ it('shows which registries a server is logged in to and which ones its applicati
     makeDockerRegistriesServerReachable($this->server);
 
     Process::fake(function ($process) {
-        $command = is_array(remoteProcessScript($process)) ? implode(' ', remoteProcessScript($process)) : remoteProcessScript($process);
+        $command = remoteProcessScript($process);
 
         return Process::result(output: str_contains($command, '.docker/config.json')
             ? json_encode(['auths' => ['ghcr.io' => ['auth' => base64_encode('user:SECRET_TOKEN')]]])
@@ -171,7 +171,7 @@ function fakeDockerRegistryServer(string $loginError = ''): array
 {
     $commands = [];
     Process::fake(function ($process) use (&$commands, $loginError) {
-        $command = is_array(remoteProcessScript($process)) ? implode(' ', remoteProcessScript($process)) : remoteProcessScript($process);
+        $command = remoteProcessScript($process);
         $commands[] = $command;
 
         if ($loginError !== '' && str_contains($command, ' login ')) {

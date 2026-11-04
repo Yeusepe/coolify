@@ -763,11 +763,13 @@ it('stops an existing vm to attach the host gpu and starts it with the gpu memor
     $commands = collect($ran);
     $shutdown = $commands->search("virsh shutdown 'coolify-dev-ubuntu-root'");
     $attach = $commands->search("virt-xml 'coolify-dev-ubuntu-root' --add-device --hostdev 'pci_0000_01_00_0'");
+    $persistenceStop = $commands->search('systemctl stop nvidia-persistenced');
     expect($shutdown)->not->toBeFalse()
+        ->and($persistenceStop)->not->toBeFalse()
         ->and($attach)->toBeGreaterThan($shutdown)
         ->and($commands)->toContain("virt-xml 'coolify-dev-ubuntu-root' --add-device --hostdev 'pci_0000_01_00_1'")
         ->and($commands->search("virsh setmem 'coolify-dev-ubuntu-root' 4096M --config"))->toBeGreaterThan($attach)
-        ->and($commands->search("virsh start 'coolify-dev-ubuntu-root'"))->toBeGreaterThan($commands->search('systemctl stop nvidia-persistenced'));
+        ->and($commands->search("virsh start 'coolify-dev-ubuntu-root'"))->toBeGreaterThan($persistenceStop);
     Process::assertNotRan(fn ($process) => str_starts_with(remoteProcessScript($process), 'virt-install '));
 });
 

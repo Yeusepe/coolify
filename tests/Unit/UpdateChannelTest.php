@@ -4,6 +4,7 @@ use App\Actions\Server\UpdateCoolify;
 use App\Jobs\CheckForUpdatesJob;
 use App\Livewire\Settings\Updates;
 use App\Models\InstanceSettings;
+use App\Models\PrivateKey;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
@@ -30,7 +31,7 @@ beforeEach(function () {
         'constants.ssh.mux_enabled' => false,
     ]);
     Team::factory()->create(['id' => 0]);
-    Server::forceCreate(['id' => 0, 'name' => 'localhost', 'ip' => '127.0.0.1', 'user' => 'root', 'team_id' => 0, 'private_key_id' => 1]);
+    Server::factory()->create(['id' => 0, 'name' => 'localhost', 'ip' => '127.0.0.1', 'user' => 'root', 'team_id' => 0, 'private_key_id' => PrivateKey::factory()->create(['team_id' => 0])->id]);
     InstanceSettings::forceCreate(['id' => 0, 'is_auto_update_enabled' => true, 'auto_update_frequency' => '0 0 * * *', 'update_check_frequency' => '0 * * * *']);
     Once::flush();
 });
