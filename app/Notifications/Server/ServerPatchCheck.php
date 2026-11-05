@@ -44,13 +44,14 @@ class ServerPatchCheck extends CustomEmailNotification
         }
 
         $totalUpdates = $this->patchData['total_updates'] ?? 0;
-        $mail->subject("Coolify: [ACTION REQUIRED] {$totalUpdates} server patches available on {$this->server->name}");
+        $mail->subject("Coolify: [ACTION REQUIRED] Server security needs attention on {$this->server->name}");
         $mail->view('emails.server-patches', [
             'name' => $this->server->name,
             'total_updates' => $totalUpdates,
             'updates' => $this->patchData['updates'] ?? [],
             'security_updates' => $this->patchData['security_updates'] ?? null,
             'reboot_required' => $this->patchData['reboot_required'] ?? null,
+            'host_security_summary' => $this->hostSecuritySummary(),
             'osId' => $this->patchData['osId'] ?? 'unknown',
             'package_manager' => $this->patchData['package_manager'] ?? 'unknown',
             'server_url' => $this->serverUrl,
@@ -86,11 +87,12 @@ class ServerPatchCheck extends CustomEmailNotification
         $osId = $this->patchData['osId'] ?? 'unknown';
         $packageManager = $this->patchData['package_manager'] ?? 'unknown';
 
-        $description = "**{$totalUpdates} package updates** available for server {$this->server->name}\n\n";
+        $description = "**Server security needs attention** on {$this->server->name}\n\n";
         $description .= "**Summary:**\n";
         $description .= '• OS: '.ucfirst($osId)."\n";
         $description .= "• Package Manager: {$packageManager}\n";
         $description .= "• Total Updates: {$totalUpdates}\n\n";
+        $description .= $this->hostSecuritySummary();
 
         // Show first few packages
         if (count($updates) > 0) {
@@ -109,11 +111,11 @@ class ServerPatchCheck extends CustomEmailNotification
             if ($criticalPackages->count() > 0) {
                 $description .= "\n **Critical packages detected** ({$criticalPackages->count()} packages may require restarts)";
             }
-            $description .= "\n [Manage Server Patches]($this->serverUrl)";
         }
+        $description .= "\n [Manage Server Patches]($this->serverUrl)";
 
         return new DiscordMessage(
-            title: ':warning: Coolify: [ACTION REQUIRED] Server patches available on '.$this->server->name,
+            title: ':warning: Coolify: [ACTION REQUIRED] Server security needs attention on '.$this->server->name,
             description: $description,
             color: DiscordMessage::errorColor(),
         );
@@ -150,11 +152,12 @@ class ServerPatchCheck extends CustomEmailNotification
         $osId = $this->patchData['osId'] ?? 'unknown';
         $packageManager = $this->patchData['package_manager'] ?? 'unknown';
 
-        $message = "🔧 Coolify: [ACTION REQUIRED] {$totalUpdates} server patches available on {$this->server->name}!\n\n";
+        $message = "🔧 Coolify: [ACTION REQUIRED] Server security needs attention on {$this->server->name}\n\n";
         $message .= "📊 Summary:\n";
         $message .= '• OS: '.ucfirst($osId)."\n";
         $message .= "• Package Manager: {$packageManager}\n";
         $message .= "• Total Updates: {$totalUpdates}\n\n";
+        $message .= $this->hostSecuritySummary();
 
         if (count($updates) > 0) {
             $message .= "📦 Sample Updates:\n";
@@ -223,11 +226,12 @@ class ServerPatchCheck extends CustomEmailNotification
         $osId = $this->patchData['osId'] ?? 'unknown';
         $packageManager = $this->patchData['package_manager'] ?? 'unknown';
 
-        $message = "[ACTION REQUIRED] {$totalUpdates} server patches available on {$this->server->name}!\n\n";
+        $message = "[ACTION REQUIRED] Server security needs attention on {$this->server->name}\n\n";
         $message .= "Summary:\n";
         $message .= '• OS: '.ucfirst($osId)."\n";
         $message .= "• Package Manager: {$packageManager}\n";
         $message .= "• Total Updates: {$totalUpdates}\n\n";
+        $message .= $this->hostSecuritySummary();
 
         if (count($updates) > 0) {
             $message .= "Sample Updates:\n";
@@ -248,7 +252,7 @@ class ServerPatchCheck extends CustomEmailNotification
         }
 
         return new PushoverMessage(
-            title: 'Server patches available',
+            title: 'Server security needs attention',
             level: 'error',
             message: $message,
             buttons: [
@@ -287,11 +291,12 @@ class ServerPatchCheck extends CustomEmailNotification
         $osId = $this->patchData['osId'] ?? 'unknown';
         $packageManager = $this->patchData['package_manager'] ?? 'unknown';
 
-        $description = "{$totalUpdates} server patches available on '{$this->server->name}'!\n\n";
+        $description = "Server security needs attention on '{$this->server->name}'\n\n";
         $description .= "*Summary:*\n";
         $description .= '• OS: '.ucfirst($osId)."\n";
         $description .= "• Package Manager: {$packageManager}\n";
         $description .= "• Total Updates: {$totalUpdates}\n\n";
+        $description .= $this->hostSecuritySummary();
 
         if (count($updates) > 0) {
             $description .= "*Sample Updates:*\n";
@@ -320,7 +325,7 @@ class ServerPatchCheck extends CustomEmailNotification
         $description .= "\n:link: <{$this->serverUrl}|Manage Server Patches>";
 
         return new SlackMessage(
-            title: 'Coolify: [ACTION REQUIRED] Server patches available',
+            title: 'Coolify: [ACTION REQUIRED] Server security needs attention',
             description: $description,
             color: SlackMessage::errorColor()
         );
@@ -351,7 +356,7 @@ class ServerPatchCheck extends CustomEmailNotification
 
         return [
             'success' => false,
-            'message' => 'Server patches available',
+            'message' => 'Server security needs attention',
             'event' => 'server_patch_check',
             'server_name' => $this->server->name,
             'server_uuid' => $this->server->uuid,
@@ -362,8 +367,30 @@ class ServerPatchCheck extends CustomEmailNotification
             'critical_packages_count' => $criticalPackages->count(),
             'security_updates' => $this->patchData['security_updates'] ?? null,
             'reboot_required' => $this->patchData['reboot_required'] ?? null,
+            'host_security_summary' => $this->hostSecuritySummary(),
+            'host_cves' => data_get($this->patchData, 'host_security.cves', []),
             'url' => $this->serverUrl,
         ];
+    }
+
+    private function hostSecuritySummary(): string
+    {
+        $reboot = match ($this->patchData['reboot_required'] ?? null) {
+            true => 'Required',
+            false => 'Not currently required',
+            default => 'Unknown',
+        };
+        $summary = "Reboot: {$reboot}\n";
+        if (isset($this->patchData['host_security'])) {
+            if ($this->patchData['host_security']['error'] !== null) {
+                $summary .= "Host CVE coverage unavailable. See the host patch page.\n";
+            } else {
+                $summary .= 'Native host report: '.count($this->patchData['host_security']['cves'])." unique CVEs\n";
+            }
+            $summary .= 'Running kernel: '.($this->patchData['host_security']['running_kernel'] ?? 'Unknown')."\n";
+        }
+
+        return $summary."\n";
     }
 
     /**

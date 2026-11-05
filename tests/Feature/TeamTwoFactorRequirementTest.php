@@ -13,7 +13,7 @@ uses(RefreshDatabase::class);
 
 beforeEach(function () {
     InstanceSettings::forceCreate(['id' => 0]);
-    $this->team = Team::factory()->create(['show_boarding' => false]);
+    $this->team = Team::factory()->create(['name' => 'Two Factor Test Team', 'show_boarding' => false]);
 });
 
 function twoFactorTeamUser(Team $team, string $role = 'member', bool $twoFactorEnabled = false): User
@@ -71,6 +71,7 @@ test('an admin with 2fa can require 2fa for the team', function () {
     Livewire::test(Index::class)
         ->set('is_two_factor_required', true)
         ->call('submit')
+        ->assertHasNoErrors()
         ->assertDispatched('success');
 
     expect($this->team->fresh()->is_two_factor_required)->toBeTrue();

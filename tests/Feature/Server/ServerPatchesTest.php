@@ -94,6 +94,18 @@ describe('patch check job', function () {
         Notification::assertSentTo($this->team, ServerPatchCheck::class);
     });
 
+    it('notifies about CVEs or a pending reboot even with no package updates', function (array $security) {
+        CheckUpdates::shouldRun()->andReturn([...patchesTestResult(0), ...$security]);
+
+        runPatchesTestJob($this->server);
+
+        Notification::assertSentTo($this->team, ServerPatchCheck::class);
+        expect($this->server->settings->fresh()->patch_check_result)->toMatchArray($security);
+    })->with([
+        [['host_security' => ['cves' => ['CVE-2026-98432'], 'running_kernel' => '6.12.107-amd64', 'error' => null]]],
+        [['reboot_required' => true]],
+    ]);
+
     it('sends the failure notification only when the check changes from ok to error', function () {
         CheckUpdates::shouldRun()->andReturn(
             ['osId' => 'ubuntu', 'package_manager' => 'apt', 'error' => 'apt is locked'],
@@ -215,7 +227,7 @@ describe('patches page', function () {
         session(['currentTeam' => $this->team]);
 
         Livewire::test(Patches::class, ['server_uuid' => $this->server->uuid])
-            ->assertSee('Server is up to date')
+            ->assertSee('No package updates')
             ->assertSee('Held back updates')
             ->assertSee('Phased rollout')
             ->assertSee('26.2-0ubuntu1~24.04.2')
@@ -294,6 +306,71 @@ describe('security, reboot, and risk', function () {
         Queue::fake();
         $this->actingAs($this->admin);
         session(['currentTeam' => $this->team]);
+    });
+
+    it('rechecks resource permissions when refreshing host reports after a team switch', function () {
+        $component = Livewire::test(Patches::class, ['server_uuid' => $this->server->uuid]);
+        $this->admin->teams()->updateExistingPivot($this->team->id, ['role' => 'member']);
+        $this->admin->unsetRelation('teams');
+        $otherTeam = Team::factory()->create();
+        $this->admin->teams()->attach($otherTeam, ['role' => 'owner']);
+        session(['currentTeam' => $otherTeam]);
+
+        $component->call('loadResult')->assertForbidden();
+    });
+
+    it('shows the running kernel, pending reboot and escaped native advisory report', function () {
+        $result = [...patchesTestResult(0), 'reboot_required' => true, 'kernel_livepatched' => true, 'host_security' => [
+            'source' => 'Ubuntu security notices (pro cves)',
+            'running_kernel' => '6.8.0-149-generic',
+            'kernel_package' => 'linux-image-6.8.0-149-generic 6.8.0-149.149',
+            'report' => 'CVE-2026-98432 <script>alert(1)</script>',
+            'cves' => ['CVE-2026-98432'],
+            'error' => null,
+        ]];
+        $this->server->settings->forceFill(['patch_check_result' => $result, 'patch_checked_at' => now()])->saveQuietly();
+
+        Livewire::test(Patches::class, ['server_uuid' => $this->server->uuid])
+            ->assertSee('6.8.0-149-generic')
+            ->assertSee('Installed updates need a reboot')
+            ->assertSee('Ubuntu reports Livepatch protection')
+            ->assertSee('CVE-2026-98432')
+            ->assertSee('<script>alert(1)</script>')
+            ->assertDontSee('<script>alert(1)</script>', escape: false)
+            ->assertSee('No package updates');
+
+        $notification = new ServerPatchCheck($this->server, $result);
+        expect($notification->toWebhook()['host_cves'])->toBe(['CVE-2026-98432'])
+            ->and($notification->toTelegram()['message'])->toContain('1 unique CVEs', 'Reboot: Required')
+            ->and($notification->toDiscord()->description)->toContain($notification->serverUrl);
+
+        $mail = $notification->toMail();
+        expect(view($mail->view, $mail->viewData)->render())
+            ->toContain('Server security needs attention')
+            ->not->toContain('0 package updates are available');
+    });
+
+    it('shows missing coverage and unknown reboot status independently of package updates', function () {
+        $result = [...patchesTestResult(0), 'host_security' => [
+            'source' => 'Debian security tracker (debsecan)',
+            'running_kernel' => '6.12-custom',
+            'kernel_package' => null,
+            'report' => null,
+            'cves' => [],
+            'error' => 'debsecan: command not found',
+        ]];
+        $this->server->settings->forceFill(['patch_check_result' => $result, 'patch_checked_at' => now()])->saveQuietly();
+
+        Livewire::test(Patches::class, ['server_uuid' => $this->server->uuid])
+            ->assertSee('Running kernel not verified')
+            ->assertSee('Reboot status unknown')
+            ->assertSee('Host CVE coverage unavailable')
+            ->assertSee('debsecan: command not found')
+            ->assertDontSee('No CVEs reported');
+
+        expect((new ServerPatchCheck($this->server, $result))->toWebhook()['host_security_summary'])
+            ->toContain('coverage unavailable', 'Reboot: Unknown')
+            ->not->toContain('0 unique CVEs');
     });
 
     it('shows security updates, risky packages, and the reboot action', function () {

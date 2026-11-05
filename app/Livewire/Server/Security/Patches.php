@@ -51,7 +51,6 @@ class Patches extends Component
     public function mount(string $server_uuid)
     {
         $this->server = Server::ownedByCurrentTeam()->whereUuid($server_uuid)->firstOrFail();
-        $this->authorize('viewSecurity', $this->server);
         $this->loadResult();
         $this->syncSettings();
     }
@@ -65,6 +64,7 @@ class Patches extends Component
 
     public function loadResult(): void
     {
+        $this->authorize('viewSecurity', $this->server);
         $this->server->settings->refresh();
         $this->result = $this->server->settings->patch_check_result;
         $this->error = $this->server->settings->patch_check_error;

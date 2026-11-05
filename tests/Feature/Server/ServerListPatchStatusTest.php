@@ -98,7 +98,7 @@ describe('patchStatus()', function () {
 describe('server list', function () {
     beforeEach(function () {
         serverListPatchServer($this, 'secure-host', [
-            'patch_check_result' => serverListPatchResult(3, 1, true),
+            'patch_check_result' => [...serverListPatchResult(3, 1, true), 'host_security' => ['cves' => ['CVE-2026-98432']]],
             'patch_checked_at' => now(),
         ]);
         serverListPatchServer($this, 'plain-host', [
@@ -117,6 +117,7 @@ describe('server list', function () {
 
         Livewire::test(Index::class)
             ->assertSee('1 security update')
+            ->assertSee('1 host CVE')
             ->assertSee('2 updates')
             ->assertSee('Reboot required')
             ->assertSee('Patch check failed')
@@ -129,11 +130,12 @@ describe('server list', function () {
         Livewire::test(Index::class)
             ->assertSee('secure-host')
             ->assertDontSee('security update')
+            ->assertDontSee('host CVE')
             ->assertDontSee('Reboot required')
             ->assertDontSee('Patch check failed');
     });
 
-    it('shows up to date when every checked server has no updates', function () {
+    it('shows no package updates without claiming the host is secure', function () {
         Server::query()->each(fn (Server $server) => $server->settings->forceFill([
             'patch_check_result' => serverListPatchResult(0, 0, false),
             'patch_check_error' => null,
@@ -142,6 +144,6 @@ describe('server list', function () {
         serverListPatchActingAs($this, 'admin');
 
         Livewire::test(Index::class)
-            ->assertSee('Up to date');
+            ->assertSee('No package updates');
     });
 });
