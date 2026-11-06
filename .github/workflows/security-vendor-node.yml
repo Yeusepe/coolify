@@ -13,7 +13,7 @@ jobs:
       matrix:
         include:
           - name: storage-nov
-            base: ghcr.io/yeusepe/coolify@sha256:16b22a77370bbb87f8bb81606263a28d8babe8bb577e882a1543e9f9fd5af78a
+            base: ghcr.io/yeusepe/coolify@sha256:b167334716c4872dedebdef596011b34d01e33c36ca9f49f72637af711b2dd4a
             node: node:24.22.1-alpine3.23@sha256:0468540aa58203ff9e40c2aab3907c52644ab818af6176b1c70a026137dc92a2
           - name: mongosh-nov
             base: ghcr.io/yeusepe/coolify@sha256:12706b98d3df0a94bf7ff887120962d298c5e28ead1bd599ad870d81361d0244
