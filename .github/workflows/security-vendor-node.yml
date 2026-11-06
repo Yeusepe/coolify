@@ -1,9 +1,6 @@
-name: Security vendor Node libraries
+name: November security package updates
 on:
   workflow_dispatch:
-  push:
-    branches: [main, security/vendor-node-patches, security/node-brotli-20261021, security/reviewed-runtime-patches-20261025, security/nested-runtime-copies, security/legacy-dependencies-20261025, fix/security-advisory-matching-20261029]
-    paths: ['docker/security/vendor-node/**', '.github/workflows/security-vendor-node.yml', 'docker/security/bun/brotli-regression.cjs']
 permissions:
   contents: read
   packages: write
@@ -15,12 +12,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: meta
-            base: ghcr.io/yeusepe/coolify@sha256:0fc7fbaea348bcde37e288cdd3cb93adbc4a9eecf64c488fbefcd42bfe1467a7
-            node: node:22.23.4-bookworm-slim@sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d
-          - name: storage
+          - name: storage-nov
             base: ghcr.io/yeusepe/coolify@sha256:16b22a77370bbb87f8bb81606263a28d8babe8bb577e882a1543e9f9fd5af78a
             node: node:24.22.1-alpine3.23@sha256:0468540aa58203ff9e40c2aab3907c52644ab818af6176b1c70a026137dc92a2
+          - name: mongosh-nov
+            base: ghcr.io/yeusepe/coolify@sha256:12706b98d3df0a94bf7ff887120962d298c5e28ead1bd599ad870d81361d0244
+            node: node:24.22.1-bookworm-slim
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
@@ -32,9 +29,9 @@ jobs:
       - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with:
           context: .
-          file: docker/security/vendor-node/Dockerfile.dependencies
+          file: docker/security/vendor-node/Dockerfile.packages
           push: true
-          tags: ghcr.io/yeusepe/coolify:security-${{ matrix.name }}-advisory-20261029
+          tags: ghcr.io/yeusepe/coolify:security-${{ matrix.name }}-${{ github.sha }}
           build-args: |
             BASE_IMAGE=${{ matrix.base }}
             PROFILE=${{ matrix.name }}
