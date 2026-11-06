@@ -71,7 +71,7 @@
         "phpstan/phpstan": "2.2.8",
         "rector/rector": "2.6.1",
         "serversideup/spin": "3.3.0",
-        "symfony/http-client": "7.4.16"
+        "symfony/http-client": "7.4.23"
     },
     "minimum-stability": "stable",
     "prefer-stable": true,
