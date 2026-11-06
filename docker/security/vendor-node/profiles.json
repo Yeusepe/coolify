@@ -145,5 +145,31 @@
         "3": "4.6.7"
       }
     }
+  },
+  "storage-nov": {
+    "root": "/app/node_modules",
+    "packages": {
+      "glob": {
+        "10": "14.0.4",
+        "13": "14.0.4"
+      },
+      "minimatch": {
+        "9": "11.0.5",
+        "10": "11.0.5"
+      }
+    }
+  },
+  "mongosh-nov": {
+    "root": "/usr/local/lib/node_modules/mongosh/node_modules",
+    "packages": {
+      "glob": {
+        "10": "14.0.4",
+        "13": "14.0.4"
+      },
+      "minimatch": {
+        "9": "11.0.5",
+        "10": "11.0.5"
+      }
+    }
   }
 }
