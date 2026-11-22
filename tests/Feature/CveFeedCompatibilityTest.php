@@ -33,7 +33,7 @@ beforeEach(function () {
     ]);
 });
 
-it('uses the documented package check and preserves full advisory metadata and exploitation signals', function () {
+it('uses the documented package check and preserves full advisory metadata and exploitation signals', function (bool|array $kev) {
     Http::fake([
         'cve.now/api/v1/check' => Http::response(['checked' => 1, 'affected' => [[
             'id' => 'GHSA-abcd-1234-5678', 'title' => 'Example', 'severity' => ['cvss' => 5.0],
@@ -42,7 +42,7 @@ it('uses the documented package check and preserves full advisory metadata and e
         ]]]),
         'cve.now/api/v1/entries?*' => Http::response(['items' => [[
             'id' => 'GHSA-abcd-1234-5678', 'modifiedAt' => '2026-11-01T00:00:00Z',
-            'exploitation' => ['kev' => true],
+            'exploitation' => ['kev' => $kev],
         ]], 'missing' => []]),
     ]);
 
@@ -56,7 +56,7 @@ it('uses the documented package check and preserves full advisory metadata and e
     Http::assertSent(fn ($request) => $request->url() === 'https://cve.now/api/v1/check'
         && $request->method() === 'POST'
         && $request->data() === ['packages' => [['ecosystem' => 'npm', 'name' => 'example', 'version' => '1.0.0']]]);
-});
+})->with(['legacy boolean' => [true], 'KEV listing object' => [['dateAdded' => '2026-11-01', 'requiredAction' => 'Apply updates.']]]);
 
 it('retains valid matches when optional full metadata is absent from the index', function () {
     Http::fake([
@@ -141,4 +141,29 @@ it('retains CVE results with a warning if Zero Wire is malformed, unavailable, o
 })->with([
     'unavailable' => [[], 503], 'redirect' => [[], 302],
     'malformed' => [['version' => 'https://jsonfeed.org/version/1.1', 'items' => [['url' => 'javascript:alert(1)']]], 200],
+]);
+
+it('retains a package match when optional advisory detail fields are malformed', function (array $metadata) {
+    Http::fake([
+        'cve.now/api/v1/check' => Http::response(['checked' => 1, 'affected' => [[
+            'id' => 'CVE-2026-12345', 'title' => 'Example', 'severity' => ['cvss' => 7.0],
+            'package' => ['ecosystem' => 'npm', 'name' => 'example', 'version' => '1.0.0'],
+            'kev' => true, 'fixed' => ['1.0.1'],
+        ]]]),
+        'cve.now/api/v1/entries?*' => Http::response(['items' => [['id' => 'CVE-2026-12345', ...$metadata]], 'missing' => []]),
+    ]);
+    $report = app(CveNowService::class)->check(feedPackageInventory());
+    expect($report['findings'][0])->toMatchArray(['id' => 'CVE-2026-12345', 'known_exploited' => true, 'fixed' => ['1.0.1']]);
+    expect($report['warnings'])->toContain('Some full CVE.now advisory metadata is unavailable. Package matches are retained; existing image reviews may require revalidation.');
+})->with([
+    'aliases string' => [['aliases' => 'invalid']],
+    'aliases scalar item' => [['aliases' => [123]]],
+    'affected scalar' => [['affected' => 'invalid']],
+    'affected item' => [['affected' => ['invalid']]],
+    'ranges scalar' => [['affected' => [['package' => 'example', 'ranges' => 'invalid']]]],
+    'fix scalar' => [['affected' => [['package' => 'example', 'ranges' => [['fixed' => 123]]]]]],
+    'invalid severity' => [['severity' => 'invalid']],
+    'invalid exploitation' => [['exploitation' => 'invalid']],
+    'invalid kev' => [['exploitation' => ['kev' => 'invalid']]],
+    'invalid modified date' => [['modifiedAt' => []]],
 ]);
