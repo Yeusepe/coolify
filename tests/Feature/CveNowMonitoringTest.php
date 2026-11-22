@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__.'/../Support/CveFeedTestHelpers.php';
+
 use App\Jobs\ServerVulnerabilityCheckJob;
 use App\Livewire\Server\Security\Vulnerabilities;
 use App\Models\Application;
@@ -51,7 +53,7 @@ it('saves the core report and notification markers before optional CWE enrichmen
     $server->team->discordNotificationSettings()->updateOrCreate([], ['discord_enabled' => true, 'discord_webhook_url' => 'https://discord.com/api/webhooks/test/test', 'server_patch_discord_notifications' => true]);
     Http::preventStrayRequests();
     Http::fake([
-        'cve.now/stack*' => Http::response(['packages' => 1, 'entries' => [['id' => 'CVE-2026-12345', 'severity' => ['cvss' => 5.0], 'exploitation' => ['kev' => true], 'matched' => ['ecosystem' => 'npm', 'name' => 'example', 'version' => '1.0.0'], 'affected' => []]]]),
+        ...cveCheckRoutes([['id' => 'CVE-2026-12345', 'severity' => ['cvss' => 5.0], 'exploitation' => ['kev' => true], 'matched' => ['ecosystem' => 'npm', 'name' => 'example', 'version' => '1.0.0'], 'affected' => []]]),
         'api.enclave.ai/v1/threats' => Http::response(['ok' => true, 'ranAt' => '2026-11-01T12:00:00Z', 'threats' => []]),
     ]);
     $service = $this->partialMock(CveNowService::class, fn ($mock) => $mock->shouldReceive('collect')->andReturn(['packages' => [['ecosystem' => 'npm', 'name' => 'example', 'version' => '1.0.0', 'container' => 'API']], 'runtimes' => [], 'containers' => [], 'warnings' => []]));
@@ -153,7 +155,7 @@ it('does not notify again for unchanged high severity matches', function () {
     $server->team->discordNotificationSettings()->updateOrCreate([], ['discord_enabled' => true, 'discord_webhook_url' => 'https://discord.com/api/webhooks/test/test', 'server_patch_discord_notifications' => true]);
     expect($server->isFunctional())->toBeTrue();
     Http::preventStrayRequests();
-    Http::fake(['cve.now/stack*' => Http::response(['packages' => 1, 'entries' => [['id' => 'CVE-2026-12345', 'title' => 'Example issue', 'severity' => ['cvss' => 9.1], 'matched' => ['ecosystem' => 'npm', 'name' => 'example', 'version' => '1.0.0'], 'affected' => []]]])]);
+    Http::fake([...cveCheckRoutes([['id' => 'CVE-2026-12345', 'title' => 'Example issue', 'severity' => ['cvss' => 9.1], 'matched' => ['ecosystem' => 'npm', 'name' => 'example', 'version' => '1.0.0'], 'affected' => []]])]);
     $service = $this->partialMock(CveNowService::class, fn ($mock) => $mock->shouldReceive('collect')->andReturn(['packages' => [['ecosystem' => 'npm', 'name' => 'example', 'version' => '1.0.0', 'container' => 'api']], 'runtimes' => [], 'containers' => [], 'warnings' => []]));
 
     (new ServerVulnerabilityCheckJob($server))->handle($service);
@@ -289,3 +291,25 @@ it('keeps software recommendations visible when vulnerability lookup is unavaila
     Sleep::assertSleptTimes(2);
     Sleep::fake(false);
 })->with(['previous report' => true, 'first scan' => false]);
+
+it('escapes Zero Wire guidance and distinguishes it from confirmed version matches', function () {
+    Storage::fake('local');
+    $server = cveMonitoringServer();
+    app(CveNowService::class)->saveReport($server, [
+        'checked_at' => now()->toIso8601String(), 'packages_checked' => 0, 'containers' => [], 'runtimes' => [], 'findings' => [],
+        'zero_wire_checked_at' => now()->toIso8601String(), 'zero_wire_briefings' => [[
+            'url' => 'https://radar.cloudflare.com/zero-wire/php-briefing', 'title' => '<script>briefing()</script>',
+            'summary' => '<script>summary()</script>', 'contexts' => ['API'], 'reviewed_at' => '2026-11-19',
+            'cves' => ['CVE-2026-12345'], 'matched_cves' => [], 'steps' => ['<script>step()</script>'],
+        ]],
+    ]);
+    Livewire::test(Vulnerabilities::class, ['server_uuid' => $server->uuid])
+        ->assertSee('Cloudflare Zero Wire briefings')
+        ->assertSee('Technology guidance only. No matching CVE found in this scan.')
+        ->assertSee('&lt;script&gt;briefing()&lt;/script&gt;', escape: false)
+        ->assertSee('&lt;script&gt;summary()&lt;/script&gt;', escape: false)
+        ->assertSee('&lt;script&gt;step()&lt;/script&gt;', escape: false)
+        ->assertDontSee('<script>briefing()</script>', escape: false)
+        ->assertDontSee('<script>summary()</script>', escape: false)
+        ->assertDontSee('<script>step()</script>', escape: false);
+});
