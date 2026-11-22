@@ -117,7 +117,7 @@ class CveNowService
                         throw new RuntimeException('CVE.now returned incomplete advisory metadata.');
                     }
                     foreach ($response['items'] as $detail) {
-                        if (! is_array($detail) || ! in_array($detail['id'] ?? null, $advisoryIds, true)) {
+                        if (! is_array($detail) || ! in_array($detail['id'] ?? null, $advisoryIds, true) || ! $this->validPackageAdvisoryMetadata($detail)) {
                             throw new RuntimeException('CVE.now returned unrelated advisory metadata.');
                         }
                     }
@@ -143,7 +143,7 @@ class CveNowService
                 $advisory = [...$detail, 'id' => $entry['id'], 'title' => $entry['title'] ?? $detail['title'] ?? $entry['id'],
                     'severity' => $entry['severity'] ?? $detail['severity'] ?? null,
                     'aliases' => array_merge($detail['aliases'] ?? [], $entry['cves'] ?? [], $entry['advisories'] ?? []),
-                    'exploitation' => ['kev' => ($detail['exploitation']['kev'] ?? false) === true || ($entry['kev'] ?? false) === true || ($entry['activelyExploited'] ?? false) === true],
+                    'exploitation' => ['kev' => is_array($detail['exploitation']['kev'] ?? null) || ($detail['exploitation']['kev'] ?? false) === true || ($entry['kev'] ?? false) === true || ($entry['activelyExploited'] ?? false) === true],
                 ];
                 $finding = $this->finding($advisory, $packages[$key]['package'], array_values(array_unique($packages[$key]['contexts'])), 'Package version match');
                 if (array_key_exists('fixed', $entry)) {
@@ -220,6 +220,47 @@ class CveNowService
         usort($findings, fn ($a, $b) => $b['score'] <=> $a['score']);
 
         return ['checked_at' => now()->toIso8601String(), 'packages_checked' => count($packages), 'containers' => $inventory['containers'] ?? [], 'runtimes' => $inventory['runtimes'] ?? [], 'warnings' => array_values(array_unique($inventory['warnings'] ?? [])), 'zero_wire_briefings' => $zeroWire['briefings'], 'zero_wire_checked_at' => $zeroWire['checked_at'], 'findings' => $findings, 'enclave_updated_at' => $enclaveUpdatedAt, 'error' => null];
+    }
+
+    private function validPackageAdvisoryMetadata(array $detail): bool
+    {
+        foreach (['title', 'modifiedAt'] as $field) {
+            if (isset($detail[$field]) && ! is_string($detail[$field])) {
+                return false;
+            }
+        }
+        foreach (['aliases', 'affected'] as $field) {
+            if (isset($detail[$field]) && (! is_array($detail[$field]) || ! array_is_list($detail[$field]))) {
+                return false;
+            }
+        }
+        foreach ($detail['aliases'] ?? [] as $alias) {
+            if (! is_string($alias)) {
+                return false;
+            }
+        }
+        if (isset($detail['severity']) && (! is_array($detail['severity']) || isset($detail['severity']['cvss']) && (! is_numeric($detail['severity']['cvss']) || $detail['severity']['cvss'] < 0 || $detail['severity']['cvss'] > 10))) {
+            return false;
+        }
+        if (isset($detail['exploitation']) && ! is_array($detail['exploitation'])) {
+            return false;
+        }
+        $kev = $detail['exploitation']['kev'] ?? null;
+        if ($kev !== null && ! is_bool($kev) && ! is_array($kev)) {
+            return false;
+        }
+        foreach ($detail['affected'] ?? [] as $affected) {
+            if (! is_array($affected) || isset($affected['package']) && ! is_string($affected['package']) || isset($affected['ranges']) && (! is_array($affected['ranges']) || ! array_is_list($affected['ranges']))) {
+                return false;
+            }
+            foreach ($affected['ranges'] ?? [] as $range) {
+                if (! is_array($range) || isset($range['fixed']) && ! is_string($range['fixed'])) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     private function enclaveFeed(): array

@@ -9,6 +9,7 @@ function cveCheckRoutes(array $entries): array
             'id' => $entry['id'], 'title' => $entry['title'] ?? $entry['id'],
             'severity' => $entry['severity'] ?? null, 'package' => $entry['matched'],
             'kev' => $entry['exploitation']['kev'] ?? false,
+            'fixed' => collect($entry['affected'] ?? [])->flatMap(fn ($affected) => array_column($affected['ranges'] ?? [], 'fixed'))->unique()->values()->all(),
             'cves' => array_values(array_filter($entry['aliases'] ?? [], fn ($id) => is_string($id) && preg_match('/^CVE-\d{4}-\d{4,}$/', $id))),
         ], $entries)]),
         'cve.now/api/v1/entries?*' => Http::response(['items' => $entries, 'missing' => []]),
