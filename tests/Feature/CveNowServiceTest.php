@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__.'/../Support/CveFeedTestHelpers.php';
+
 use App\Models\Server;
 use App\Services\CveNowService;
 use Illuminate\Support\Facades\Http;
@@ -33,12 +35,12 @@ it('collects inventory through the non-root sudo command parser', function () {
 
 it('matches installed package versions without exporting container settings', function () {
     Http::preventStrayRequests();
-    Http::fake(['cve.now/stack*' => Http::response(['packages' => 1, 'entries' => [[
+    Http::fake([...cveCheckRoutes([[
         'id' => 'CVE-2026-12345', 'title' => '<script>untrusted</script>', 'severity' => ['cvss' => 9.1],
         'aliases' => ['CVE-2026-12346', 'CVE-2026-12345', '../../secrets', ['CVE-2026-12347']],
         'matched' => ['ecosystem' => 'npm', 'name' => 'example', 'version' => '1.0.0'],
         'affected' => [['ecosystem' => 'npm', 'package' => 'example', 'ranges' => [['introduced' => '0', 'fixed' => '1.0.1']]]],
-    ]]])]);
+    ]])]);
     $inventory = ['packages' => [['ecosystem' => 'npm', 'name' => 'example', 'version' => '1.0.0', 'container' => 'api']], 'runtimes' => [], 'warnings' => []];
 
     $report = app(CveNowService::class)->check($inventory);
@@ -48,7 +50,7 @@ it('matches installed package versions without exporting container settings', fu
         ->and($report['findings'][0]['contexts'])->toBe(['api'])
         ->and($report['findings'][0]['cve_ids'])->toBe(['CVE-2026-12345', 'CVE-2026-12346'])
         ->and($report['findings'][0]['url'])->toBe('https://cve.now/CVE-2026-12345');
-    Http::assertSent(fn ($request) => $request->url() === 'https://cve.now/stack?p=npm%3Aexample%401.0.0&format=json');
+    Http::assertSent(fn ($request) => $request->url() === 'https://cve.now/api/v1/check' && $request->method() === 'POST' && $request['packages'] === [['ecosystem' => 'npm', 'name' => 'example', 'version' => '1.0.0']]);
 });
 
 it('detects database and proxy versions and preserves the actual Bun prerelease', function (string $minioVersion) {
@@ -89,7 +91,7 @@ SH));
 
 it('does not interpret an invalid upstream response as a clean report', function () {
     Http::preventStrayRequests();
-    Http::fake(['cve.now/stack*' => Http::response(['packages' => 1])]);
+    Http::fake(['cve.now/api/v1/check' => Http::response(['checked' => 1])]);
 
     expect(fn () => app(CveNowService::class)->check(['packages' => [['ecosystem' => 'npm', 'name' => 'example', 'version' => '1.0.0', 'container' => 'api']], 'runtimes' => []]))
         ->toThrow(RuntimeException::class);
@@ -97,9 +99,9 @@ it('does not interpret an invalid upstream response as a clean report', function
 
 it('rejects upstream matches for a version that was not submitted', function () {
     Http::preventStrayRequests();
-    Http::fake(['cve.now/stack*' => Http::response(['packages' => 1, 'entries' => [[
+    Http::fake([...cveCheckRoutes([[
         'id' => 'CVE-2026-12345', 'matched' => ['ecosystem' => 'npm', 'name' => 'example', 'version' => '0.0.1'],
-    ]]])]);
+    ]])]);
 
     expect(fn () => app(CveNowService::class)->check(['packages' => [['ecosystem' => 'npm', 'name' => 'example', 'version' => '1.0.0', 'container' => 'api']], 'runtimes' => []]))
         ->toThrow(RuntimeException::class);
@@ -253,10 +255,10 @@ function enclaveCveThreat(array $overrides = []): array
 it('enriches matching advisory IDs and aliases without uploading inventory or duplicating findings', function (string $id, string $stage, bool $exploited) {
     Http::preventStrayRequests();
     Http::fake([
-        'cve.now/stack*' => Http::response(['packages' => 1, 'entries' => [[
+        ...cveCheckRoutes([[
             'id' => $id, 'severity' => ['cvss' => 5.0],
             'matched' => ['ecosystem' => 'npm', 'name' => 'example', 'version' => '1.0.0'], 'affected' => [],
-        ]]]),
+        ]]),
         'api.enclave.ai/v1/threats' => Http::response(['ok' => true, 'ranAt' => '2026-11-01T12:00:00Z', 'threats' => [enclaveCveThreat(['aliases' => ['GHSA-abcd-1234-5678'], 'stage' => $stage]), enclaveCveThreat(['cveId' => 'ZDI-CAN-33367', 'products' => ['Linux'], 'affected' => []])]]),
     ]);
     $inventory = ['packages' => [['ecosystem' => 'npm', 'name' => 'example', 'version' => '1.0.0', 'container' => 'private-container']], 'runtimes' => []];
@@ -269,7 +271,7 @@ it('enriches matching advisory IDs and aliases without uploading inventory or du
     expect($report['findings'][0])->toMatchArray(['id' => $id, 'known_exploited' => $exploited, 'score' => 5.0, 'enclave' => ['url' => 'https://app.enclave.ai/threat-feed/CVE-2026-12345', 'id' => 'CVE-2026-12345', 'stage' => $stage, 'ransomware' => true]]);
     expect($report['enclave_updated_at'])->toBe('2026-11-01T12:00:00Z');
     Http::assertSent(fn ($request) => $request->url() === 'https://api.enclave.ai/v1/threats' && $request->method() === 'GET' && $request->data() === []);
-    Http::assertSentCount(2);
+    Http::assertSentCount(3);
 })->with([
     'confirmed CVE' => ['CVE-2026-12345', 'exploited', true],
     'unconfirmed alias' => ['GHSA-abcd-1234-5678', 'reported', false],
@@ -351,9 +353,9 @@ it('resolves uncertain runtime aliases using authoritative ranges discovered thr
 it('retains CVE.now findings with a visible warning when Enclave fails validation or availability', function (array $body, int $status) {
     Http::preventStrayRequests();
     Http::fake([
-        'cve.now/stack*' => Http::response(['packages' => 1, 'entries' => [[
+        ...cveCheckRoutes([[
             'id' => 'CVE-2026-12345', 'matched' => ['ecosystem' => 'npm', 'name' => 'example', 'version' => '1.0.0'], 'affected' => [],
-        ]]]),
+        ]]),
         'api.enclave.ai/v1/threats' => Http::response($body, $status, ['Location' => 'http://127.0.0.1/secrets']),
     ]);
 
@@ -363,7 +365,7 @@ it('retains CVE.now findings with a visible warning when Enclave fails validatio
     expect($report['error'])->toBeNull();
     expect($report['enclave_updated_at'])->toBeNull();
     expect($report['warnings'])->toContain('Enclave threat intelligence is unavailable. CVE.now results are retained; exploitation signals may be incomplete.');
-    Http::assertSentCount(2);
+    Http::assertSentCount(3);
 })->with([
     'unavailable' => [[], 503],
     'redirect' => [[], 302],

@@ -53,7 +53,7 @@ jobs:
           tests/Feature/RedisUsernameEnvironmentVariableTest.php tests/Feature/StandaloneSqliteTest.php
           tests/Unit/ProductionImageWorkflowTest.php
           tests/Feature/ServerSettingsAuditTest.php
-          tests/Feature/CveNowServiceTest.php
+          tests/Feature/CveNowServiceTest.php tests/Feature/CveFeedCompatibilityTest.php
           tests/Feature/CweServiceTest.php
           tests/Feature/SourceScanServiceTest.php tests/Feature/SourceScanningTest.php
           app/Services/SourceScanService.php app/Jobs/ServerSourceScanJob.php app/Livewire/Server/Security/SourceScanning.php
@@ -67,6 +67,7 @@ jobs:
           tests/Feature/TeamTwoFactorRequirementTest.php
           tests/Feature/Server/HostSecurityCheckTest.php tests/Feature/Server/ServerPatchesTest.php
           tests/Feature/Server/ServerListPatchStatusTest.php tests/Unit/Actions/Server/ServerPatchCommandsTest.php
+      - run: vendor/bin/pint --test app/Services/CveNowService.php app/Services/ZeroWireService.php tests/Feature/CveFeedCompatibilityTest.php tests/Support/CveFeedTestHelpers.php
       - name: Full upstream regression suite
         if: inputs.full_suite == true
         run: php artisan test --compact --parallel --processes=4 --testsuite=Unit,Feature
@@ -106,7 +107,7 @@ jobs:
           tests/Feature/ServerProxyConfigurationAuthorizationTest.php
           tests/Feature/SshMultiplexingLockTest.php
           tests/Feature/ServerSettingsAuditTest.php
-          tests/Feature/CveNowServiceTest.php
+          tests/Feature/CveNowServiceTest.php tests/Feature/CveFeedCompatibilityTest.php
           tests/Feature/CweServiceTest.php
           tests/Feature/SoftwareRecommendationServiceTest.php
           tests/Feature/CveNowMonitoringTest.php
