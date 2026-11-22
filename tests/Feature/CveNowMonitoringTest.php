@@ -313,3 +313,16 @@ it('escapes Zero Wire guidance and distinguishes it from confirmed version match
         ->assertDontSee('<script>summary()</script>', escape: false)
         ->assertDontSee('<script>step()</script>', escape: false);
 });
+
+it('does not claim an empty Zero Wire feed when the optional source is unavailable', function () {
+    Storage::fake('local');
+    $server = cveMonitoringServer();
+    app(CveNowService::class)->saveReport($server, [
+        'checked_at' => now()->toIso8601String(), 'packages_checked' => 0, 'containers' => [], 'runtimes' => [], 'findings' => [],
+        'zero_wire_checked_at' => null, 'zero_wire_briefings' => [],
+        'warnings' => ['Cloudflare Zero Wire is unavailable. CVE.now results are retained; briefing guidance may be incomplete.'],
+    ]);
+    Livewire::test(Vulnerabilities::class, ['server_uuid' => $server->uuid])
+        ->assertSee('Cloudflare Zero Wire is unavailable.')
+        ->assertDontSee('No relevant briefings in the current Zero Wire feed.');
+});

@@ -59,7 +59,7 @@
                     </x-application.settings-section>
                 @endif
                 @if (isset($report['checked_at']))
-                @if (isset($report['zero_wire_briefings']))
+                @if ($report['zero_wire_checked_at'] ?? null)
                 <x-application.settings-section title="Cloudflare Zero Wire briefings" helper="Guidance for detected technologies and matching CVEs. Technology relevance alone does not confirm that your installed version is affected. Cloudflare mitigation guidance does not prove your deployment is protected.">
                     @forelse ($report['zero_wire_briefings'] as $briefing)
                         <details class="border-b border-neutral-200 py-3 dark:border-white/[0.08]" wire:key="zero-wire-{{ hash('sha256', $briefing['url']) }}">
