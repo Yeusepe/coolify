@@ -6,6 +6,10 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
+      feed_patch_image:
+        description: Build the November CVE feed patch on the exact deployed runtime
+        type: boolean
+        default: false
       full_suite:
         description: Run all upstream unit and feature tests
         type: boolean
@@ -128,7 +132,7 @@ jobs:
       - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
-          file: docker/production/Dockerfile
+          file: ${{ inputs.feed_patch_image && 'docker/production/Dockerfile.cve-feeds' || 'docker/production/Dockerfile' }}
           platforms: linux/amd64
           push: true
           tags: |
