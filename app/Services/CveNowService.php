@@ -93,19 +93,66 @@ class CveNowService
         }
         ksort($packages);
         $findings = [];
-        foreach (array_chunk(array_keys($packages), 25) as $batch) {
-            $data = $this->request('/stack', ['p' => implode(',', $batch), 'format' => 'json']);
-            if (! isset($data['entries'], $data['packages']) || ! is_array($data['entries']) || $data['packages'] !== count($batch)) {
+        foreach (array_chunk(array_keys($packages), 250) as $batch) {
+            $submitted = array_map(fn ($key) => array_intersect_key($packages[$key]['package'], array_flip(['ecosystem', 'name', 'version'])), $batch);
+            $data = $this->request('/api/v1/check', payload: ['packages' => $submitted]);
+            if (($data['checked'] ?? null) !== count($batch) || ! is_array($data['affected'] ?? null) || ! array_is_list($data['affected']) || count($data['affected']) > 50000 || isset($data['complete']) && ! is_bool($data['complete'])) {
                 throw new RuntimeException('CVE.now returned an incomplete package response.');
             }
-            foreach ($data['entries'] as $entry) {
-                $matched = $entry['matched'] ?? [];
-                $matchedPackage = $this->parsePackages(strtolower($matched['ecosystem'] ?? '').':'.($matched['name'] ?? '').'@'.($matched['version'] ?? ''))[0] ?? [];
-                $key = ($matchedPackage['ecosystem'] ?? '').':'.($matchedPackage['name'] ?? '').'@'.($matchedPackage['version'] ?? '');
+            if (($data['complete'] ?? true) === false || ! empty($data['unsupported'])) {
+                $inventory['warnings'][] = 'CVE.now could not confirm advisory coverage for some submitted packages. An empty result is not an all-clear.';
+            }
+            $ids = [];
+            foreach ($data['affected'] as $entry) {
+                if (! is_array($entry) || ! is_string($entry['id'] ?? null) || ! preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]{2,100}$/', $entry['id'])) {
+                    throw new RuntimeException('CVE.now returned an invalid advisory identifier.');
+                }
+                $ids[$entry['id']] = true;
+            }
+            $details = [];
+            foreach (array_chunk(array_keys($ids), 25) as $advisoryIds) {
+                try {
+                    $response = $this->request('/api/v1/entries', ['ids' => implode(',', $advisoryIds)]);
+                    if (! is_array($response['items'] ?? null) || ! array_is_list($response['items'])) {
+                        throw new RuntimeException('CVE.now returned incomplete advisory metadata.');
+                    }
+                    foreach ($response['items'] as $detail) {
+                        if (! is_array($detail) || ! in_array($detail['id'] ?? null, $advisoryIds, true) || ! $this->validPackageAdvisoryMetadata($detail)) {
+                            throw new RuntimeException('CVE.now returned unrelated advisory metadata.');
+                        }
+                    }
+                    foreach ($response['items'] as $detail) {
+                        $details[$detail['id']] = $detail;
+                    }
+                } catch (\Throwable) {
+                    $inventory['warnings'][] = 'Some full CVE.now advisory metadata is unavailable. Package matches are retained; existing image reviews may require revalidation.';
+                }
+            }
+            foreach ($data['affected'] as $entry) {
+                $matched = $entry['package'] ?? [];
+                try {
+                    $matchedPackage = $this->parsePackages(strtolower($matched['ecosystem'] ?? '').':'.($matched['name'] ?? '').'@'.($matched['version'] ?? ''))[0];
+                } catch (InvalidArgumentException) {
+                    throw new RuntimeException('CVE.now returned an invalid package match.');
+                }
+                $key = $matchedPackage['ecosystem'].':'.$matchedPackage['name'].'@'.$matchedPackage['version'];
                 if (! in_array($key, $batch, true)) {
                     throw new RuntimeException('CVE.now returned a match outside the submitted inventory.');
                 }
-                $finding = $this->finding($entry, $packages[$key]['package'], array_values(array_unique($packages[$key]['contexts'])), 'Package version match');
+                $detail = $details[$entry['id']] ?? [];
+                $advisory = [...$detail, 'id' => $entry['id'], 'title' => $entry['title'] ?? $detail['title'] ?? $entry['id'],
+                    'severity' => $entry['severity'] ?? $detail['severity'] ?? null,
+                    'aliases' => array_merge($detail['aliases'] ?? [], $entry['cves'] ?? [], $entry['advisories'] ?? []),
+                    'exploitation' => ['kev' => is_array($detail['exploitation']['kev'] ?? null) || ($detail['exploitation']['kev'] ?? false) === true || ($entry['kev'] ?? false) === true || ($entry['activelyExploited'] ?? false) === true],
+                ];
+                $finding = $this->finding($advisory, $packages[$key]['package'], array_values(array_unique($packages[$key]['contexts'])), 'Package version match');
+                if (array_key_exists('fixed', $entry)) {
+                    if (! is_array($entry['fixed']) || ! array_is_list($entry['fixed']) || collect($entry['fixed'])->contains(fn ($version) => ! is_string($version))) {
+                        throw new RuntimeException('CVE.now returned invalid fix versions.');
+                    }
+                    $finding['fixed'] = array_values(array_unique(array_map(fn ($version) => mb_substr($version, 0, 80), $entry['fixed'])));
+                    sort($finding['fixed']);
+                }
                 $findings[$finding['id'].'|'.$key] = $finding;
             }
         }
@@ -163,10 +210,57 @@ class CveNowService
         } catch (\Throwable) {
             $inventory['warnings'][] = 'Enclave threat intelligence is unavailable. CVE.now results are retained; exploitation signals may be incomplete.';
         }
+        $zeroWire = ['briefings' => [], 'checked_at' => null];
+        try {
+            $zeroWire = app(ZeroWireService::class)->briefings($inventory, $findings);
+        } catch (\Throwable) {
+            $inventory['warnings'][] = 'Cloudflare Zero Wire is unavailable. CVE.now results are retained; briefing guidance may be incomplete.';
+        }
         $findings = array_values($findings);
         usort($findings, fn ($a, $b) => $b['score'] <=> $a['score']);
 
-        return ['checked_at' => now()->toIso8601String(), 'packages_checked' => count($packages), 'containers' => $inventory['containers'] ?? [], 'runtimes' => $inventory['runtimes'] ?? [], 'warnings' => $inventory['warnings'] ?? [], 'findings' => $findings, 'enclave_updated_at' => $enclaveUpdatedAt, 'error' => null];
+        return ['checked_at' => now()->toIso8601String(), 'packages_checked' => count($packages), 'containers' => $inventory['containers'] ?? [], 'runtimes' => $inventory['runtimes'] ?? [], 'warnings' => array_values(array_unique($inventory['warnings'] ?? [])), 'zero_wire_briefings' => $zeroWire['briefings'], 'zero_wire_checked_at' => $zeroWire['checked_at'], 'findings' => $findings, 'enclave_updated_at' => $enclaveUpdatedAt, 'error' => null];
+    }
+
+    private function validPackageAdvisoryMetadata(array $detail): bool
+    {
+        foreach (['title', 'modifiedAt'] as $field) {
+            if (isset($detail[$field]) && ! is_string($detail[$field])) {
+                return false;
+            }
+        }
+        foreach (['aliases', 'affected'] as $field) {
+            if (isset($detail[$field]) && (! is_array($detail[$field]) || ! array_is_list($detail[$field]))) {
+                return false;
+            }
+        }
+        foreach ($detail['aliases'] ?? [] as $alias) {
+            if (! is_string($alias)) {
+                return false;
+            }
+        }
+        if (isset($detail['severity']) && (! is_array($detail['severity']) || isset($detail['severity']['cvss']) && (! is_numeric($detail['severity']['cvss']) || $detail['severity']['cvss'] < 0 || $detail['severity']['cvss'] > 10))) {
+            return false;
+        }
+        if (isset($detail['exploitation']) && ! is_array($detail['exploitation'])) {
+            return false;
+        }
+        $kev = $detail['exploitation']['kev'] ?? null;
+        if ($kev !== null && ! is_bool($kev) && ! is_array($kev)) {
+            return false;
+        }
+        foreach ($detail['affected'] ?? [] as $affected) {
+            if (! is_array($affected) || isset($affected['package']) && ! is_string($affected['package']) || isset($affected['ranges']) && (! is_array($affected['ranges']) || ! array_is_list($affected['ranges']))) {
+                return false;
+            }
+            foreach ($affected['ranges'] ?? [] as $range) {
+                if (! is_array($range) || isset($range['fixed']) && ! is_string($range['fixed'])) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     private function enclaveFeed(): array
@@ -330,15 +424,19 @@ class CveNowService
         return [...$report, 'findings' => $active, 'reviewed_findings' => $reviewed, 'reviews' => $reviews];
     }
 
-    private function request(string $path, array $query = []): array
+    private function request(string $path, array $query = [], ?array $payload = null): array
     {
-        $key = 'cve-now:http:'.hash('sha256', $path.json_encode($query));
+        $key = 'cve-now:http:'.hash('sha256', $path.json_encode([$query, $payload]));
 
-        return Cache::remember($key, 3600, function () use ($path, $query) {
+        return Cache::remember($key, 3600, function () use ($path, $query, $payload) {
             $url = 'https://cve.now'.$path;
             for ($redirects = 0; $redirects < 4; $redirects++) {
-                $response = Http::acceptJson()->connectTimeout(5)->timeout(25)->retry([500, 2000], 0, fn ($exception) => $exception instanceof ConnectionException || ($exception instanceof RequestException && ($exception->response->serverError() || $exception->response->status() === 429)))->withOptions(['allow_redirects' => false])->get($url, $query);
+                $response = Http::acceptJson()->connectTimeout(5)->timeout(25)->retry([500, 2000], 0, fn ($exception) => $exception instanceof ConnectionException || ($exception instanceof RequestException && ($exception->response->serverError() || $exception->response->status() === 429)))->withOptions(['allow_redirects' => false]);
+                $response = $payload === null ? $response->get($url, $query) : $response->post($url, $payload);
                 if ($response->redirect()) {
+                    if ($payload !== null) {
+                        throw new RuntimeException('CVE.now redirected the package inventory request.');
+                    }
                     $next = $response->header('Location');
                     if (str_starts_with($next, '/') && ! str_starts_with($next, '//')) {
                         $next = 'https://cve.now'.$next;

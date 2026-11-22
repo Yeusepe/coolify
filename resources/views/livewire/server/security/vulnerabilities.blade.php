@@ -4,12 +4,13 @@
     <div class="server-settings-workspace application-settings-workspace mt-4 grid w-full min-w-0 gap-8 lg:mt-0 xl:grid-cols-[210px_minmax(0,1fr)]">
         <x-server.sidebar :server="$server" activeMenu="security" />
         <div class="application-settings-form flex min-w-0 flex-col gap-6">
-            <x-application.settings-section title="Vulnerabilities" helper="Installed software checked against CVE.now and Enclave threat intelligence.">
+            <x-application.settings-section title="Vulnerabilities" helper="Installed software checked against CVE.now, with Enclave intelligence and Cloudflare Zero Wire briefings.">
                 <x-slot:actions><x-forms.button wire:click="refreshReport" :disabled="$pending || !$enabled">{{ $pending ? 'Check in progress' : 'Check now' }}</x-forms.button></x-slot:actions>
                 @error('monitoring')<x-callout type="warning" :title="$message" />@enderror
                 @if (!$enabled)<x-callout type="warning" title="Monitoring is disabled for this installation" />@endif
-                <p class="text-sm text-neutral-600 dark:text-fg-dim">Automatic checks run hourly. New high and critical version matches use your existing server patch notification channels. Advisories with uncertain version applicability stay on this page without triggering alerts. Names and versions are sent to CVE.now. Enclave's public feed is matched locally without uploading inventory. Credentials, source code and lockfiles are not uploaded.</p>
+                <p class="text-sm text-neutral-600 dark:text-fg-dim">Automatic checks run hourly. New high and critical version matches use your existing server patch notification channels. Advisories with uncertain version applicability stay on this page without triggering alerts. Names and versions are sent to CVE.now. Enclave and Cloudflare Zero Wire public feeds are matched locally without uploading inventory. Credentials, source code and lockfiles are not uploaded.</p>
                 @if ($report['enclave_updated_at'] ?? null)<p class="mt-3 text-sm text-neutral-600 dark:text-fg-dim">Enclave feed refreshed {{ \Illuminate\Support\Carbon::parse($report['enclave_updated_at'])->diffForHumans() }}.</p>@endif
+                @if ($report['zero_wire_checked_at'] ?? null)<p class="mt-3 text-sm text-neutral-600 dark:text-fg-dim">Cloudflare Zero Wire checked {{ \Illuminate\Support\Carbon::parse($report['zero_wire_checked_at'])->diffForHumans() }}.</p>@endif
                 @if (isset($report['inventory_checked_at']))<p class="mt-3 text-sm text-neutral-600 dark:text-fg-dim">Software inventory checked {{ \Illuminate\Support\Carbon::parse($report['inventory_checked_at'])->diffForHumans() }}.</p>@endif
                 @if ($report['error'] ?? null)<x-callout type="danger" title="Check could not finish">{{ $report['error'] }} Last successful results remain below.</x-callout>@endif
                 @if (isset($report['checked_at']))
@@ -58,6 +59,23 @@
                     </x-application.settings-section>
                 @endif
                 @if (isset($report['checked_at']))
+                @if ($report['zero_wire_checked_at'] ?? null)
+                <x-application.settings-section title="Cloudflare Zero Wire briefings" helper="Guidance for detected technologies and matching CVEs. Technology relevance alone does not confirm that your installed version is affected. Cloudflare mitigation guidance does not prove your deployment is protected.">
+                    @forelse ($report['zero_wire_briefings'] as $briefing)
+                        <details class="border-b border-neutral-200 py-3 dark:border-white/[0.08]" wire:key="zero-wire-{{ hash('sha256', $briefing['url']) }}">
+                            <summary class="cursor-pointer text-sm font-medium">{{ $briefing['title'] }}</summary>
+                            <p class="mt-2 text-sm">{{ $briefing['summary'] }}</p>
+                            <p class="mt-2 break-words text-xs">Relevant resources: {{ implode(', ', $briefing['contexts']) }}. Cloudflare reviewed: {{ $briefing['reviewed_at'] }}.</p>
+                            <p class="mt-2 text-xs">{{ $briefing['matched_cves'] ? 'CVEs also present in this scan: '.implode(', ', $briefing['matched_cves']) : 'Technology guidance only. No matching CVE found in this scan.' }}</p>
+                            <p class="mt-2 break-words text-xs">Briefing CVEs: {{ implode(', ', $briefing['cves']) ?: 'None listed' }}.</p>
+                            <ol class="mt-2 list-decimal space-y-2 pl-5 text-xs">@foreach ($briefing['steps'] as $step)<li>{{ $step }}</li>@endforeach</ol>
+                            <a class="mt-2 inline-block text-xs underline" href="{{ $briefing['url'] }}" target="_blank" rel="noopener noreferrer">Read Cloudflare briefing and sources</a>
+                        </details>
+                    @empty
+                        <p class="text-sm">No relevant briefings in the current Zero Wire feed. This does not certify that the server is vulnerability-free.</p>
+                    @endforelse
+                </x-application.settings-section>
+                @endif
                 <x-application.settings-section title="Advisory matches" helper="Version matches require deployment and vendor-backport review. No packages are changed automatically.">
                     @forelse (array_slice($report['findings'], ($page - 1) * 25, 25) as $finding)
                         <div class="border-b border-neutral-200 py-4 last:border-0 dark:border-white/[0.08]" wire:key="{{ hash('sha256', $finding['id'].$finding['ecosystem'].$finding['package'].$finding['version']) }}">
@@ -105,7 +123,7 @@
                 </form>
             </x-application.settings-section>
             <x-callout type="info" title="Coverage and source">
-                Checks cover discovered npm, Composer and NuGet packages, plus recent critical PHP, Node.js, Docker, PostgreSQL, Redis, Nginx and OpenSSL runtime advisories. <a class="underline" href="https://app.enclave.ai/threat-feed" target="_blank" rel="noopener noreferrer">Enclave Threat Feed</a> adds exploitation signals to matching advisory IDs and discovers additional advisories for these runtimes. Additional runtime version ranges and fix versions are checked against CVE.org records; unverified ranges remain review-only. Vendor release recommendations also cover detected Bun, ASP.NET Core, MongoDB, proxies and other supported software. A newer release is not proof of a vulnerability; an older version may include distribution backports. Unidentified binaries and compiled dependencies are not fully covered. Use <a class="underline" href="{{ route('server.security.patches', ['server_uuid' => $server->uuid]) }}" {{ wireNavigate() }}>Server patching</a> for operating system updates. CVE.now merges advisory sources; its model-written summaries are not used to decide matches. <a class="underline" href="https://cve.now/" target="_blank" rel="noopener noreferrer">CVE.now</a> summaries are CC-BY 4.0. Uses NVD data; not endorsed by NVD.
+                Checks cover discovered npm, Composer and NuGet packages, plus recent critical PHP, Node.js, Docker, PostgreSQL, Redis, Nginx and OpenSSL runtime advisories. <a class="underline" href="https://app.enclave.ai/threat-feed" target="_blank" rel="noopener noreferrer">Enclave Threat Feed</a> adds exploitation signals to matching advisory IDs and discovers additional advisories for these runtimes. <a class="underline" href="https://radar.cloudflare.com/zero-wire" target="_blank" rel="noopener noreferrer">Cloudflare Zero Wire</a> adds locally matched briefing guidance. It does not change version matches, severity or exploitation flags. Additional runtime version ranges and fix versions are checked against CVE.org records; unverified ranges remain review-only. Vendor release recommendations also cover detected Bun, ASP.NET Core, MongoDB, proxies and other supported software. A newer release is not proof of a vulnerability; an older version may include distribution backports. Unidentified binaries and compiled dependencies are not fully covered. Use <a class="underline" href="{{ route('server.security.patches', ['server_uuid' => $server->uuid]) }}" {{ wireNavigate() }}>Server patching</a> for operating system updates. CVE.now merges advisory sources; its model-written summaries are not used to decide matches. <a class="underline" href="https://cve.now/" target="_blank" rel="noopener noreferrer">CVE.now</a> summaries are CC-BY 4.0. Uses NVD data; not endorsed by NVD.
                 <p class="mt-2"><a class="underline" href="https://cwe.mitre.org/" target="_blank" rel="noopener noreferrer">CWE</a> labels describe weakness types mapped in published CVE records. They do not prove that installed software is affected and do not change alerts. Missing labels do not mean no weakness exists. Names are cached from MITRE's public API; no server inventory is sent to MITRE. CWE™ content: Copyright &copy; 2006–2026 The MITRE Corporation. <a class="underline" href="{{ asset('cwe-terms.txt') }}" target="_blank" rel="noopener noreferrer">CWE terms of use</a>.</p>
                 @foreach ($report['warnings'] ?? [] as $warning)<p>{{ $warning }}</p>@endforeach
             </x-callout>
